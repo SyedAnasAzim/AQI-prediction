@@ -1,2 +1,5 @@
-pandas 
-pytest
+numpy
+pandas
+requests
+python-dotenv
+hopsworks[python]
