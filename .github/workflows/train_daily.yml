@@ -1,0 +1,27 @@
+name: Daily Model Training
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # 03:00 UTC daily — after the hourly feature pipeline has caught up
+  workflow_dispatch:        # allows manual triggering from the Actions tab
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install hopsworks scikit-learn pandas numpy joblib tensorflow
+
+      - name: Run daily training pipeline
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+        run: python scripts/train_pipeline.py
