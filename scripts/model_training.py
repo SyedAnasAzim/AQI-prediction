@@ -77,9 +77,10 @@ def preprocess(raw_df, fg):
     # Reindex to a full hourly range and interpolate short gaps only (limit=2),
     # so longer genuine outages are left as NaN rather than fabricated
     full_index = pd.date_range(df.index.min(), df.index.max(), freq="h")
+    full_index.name = "timestamp"
     df = df.reindex(full_index)
     df = df.interpolate(method="time", limit=2)
-
+    
     fg.insert(df.loc[missing_rows].reset_index()) 
 
     # Time-based features
