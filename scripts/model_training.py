@@ -80,7 +80,7 @@ def preprocess(raw_df, fg):
     df = df.reindex(full_index)
     df = df.interpolate(method="time", limit=2)
 
-    fg.insert(df.loc[missing_rows]) 
+    fg.insert(df.loc[missing_rows].reset_index() 
 
     # Time-based features
     df["month"] = df.index.month - 1
