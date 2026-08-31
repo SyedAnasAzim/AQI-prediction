@@ -24,4 +24,4 @@ jobs:
       - name: Run daily training pipeline
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
-        run: python scripts/train_pipeline.py
+        run: python scripts/model_training.py
