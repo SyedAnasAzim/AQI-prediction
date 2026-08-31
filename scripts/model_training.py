@@ -83,6 +83,8 @@ def preprocess(raw_df, fg):
 
     missing_df = df.loc[missing_rows].copy()
     missing_df.index.name = "timestamp"
+    int_cols = ["us_aqi", "relative_humidity_2m", "wind_direction_10m", "cloud_cover"]
+    missing_df[int_cols] = missing_df[int_cols].round().astype("int64")
     fg.insert(missing_df.reset_index()) 
 
     # Time-based features
