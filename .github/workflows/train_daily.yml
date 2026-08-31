@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install hopsworks["python"] scikit-learn pandas numpy joblib tensorflow
+          pip install hopsworks["python"] scikit-learn pandas numpy joblib tensorflow dotenv
 
       - name: Run daily training pipeline
         env:
