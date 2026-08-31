@@ -256,7 +256,7 @@ def main():
             "test_rmse": rmse(y_test, ridge_pred),
         }
         print(f"Ridge (alpha={best_alpha}) — {all_metrics['ridge'][horizon]}")
-        print(f"Compared to persistence — R²: {(all_metrics['ridge'][horizon]["r2"]-persist_r2)*100/persist_r2:.3f}, MAE: {(all_metrics['ridge'][horizon]["mae"]-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['ridge'][horizon]["rmse"]-persist_rmse)*100/persist_rmse:.3f}")
+        print(f"Compared to persistence — R²: {(all_metrics['ridge'][horizon]["test_r2"]-persist_r2)*100/persist_r2:.3f}, MAE: {(all_metrics['ridge'][horizon]["test_mae"]-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['ridge'][horizon]["test_rmse"]-persist_rmse)*100/persist_rmse:.3f}")
         # --- Random Forest ---
         rf_model = RandomForestRegressor(
             n_estimators=200, max_depth=8, min_samples_leaf=20,
@@ -271,7 +271,7 @@ def main():
             "test_rmse": rmse(y_test, rf_pred),
         }
         print(f"Random Forest — {all_metrics['rf'][horizon]}")
-        print(f"Compared to persistence — R²: {(all_metrics['ridge'][horizon]["r2"]-persist_r2)*100/persist_r2:.3f}, MAE: {(all_metrics['ridge'][horizon]["mae"]-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['ridge'][horizon]["rmse"]-persist_rmse)*100/persist_rmse:.3f}")
+        print(f"Compared to persistence — R²: {(all_metrics['rf'][horizon]["r2"]-persist_r2)*100/persist_r2:.3f}, MAE: {(all_metrics['rf'][horizon]["test_mae"]-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['rf'][horizon]["test_rmse"]-persist_rmse)*100/persist_rmse:.3f}")
   
         # --- Neural Network (full retrain, same as Ridge/RF) ---
         tf.random.set_seed(42)
@@ -292,7 +292,7 @@ def main():
             "test_rmse": rmse(y_test, nn_pred),
         }
         print(f"Neural Network — {all_metrics['nn'][horizon]}")
-        print(f"Compared to persistence — R²: {(all_metrics['ridge'][horizon]["r2"]-persist_r2)*100/persist_r2:.3f}, MAE: {(all_metrics['ridge'][horizon]["mae"]-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['ridge'][horizon]["rmse"]-persist_rmse)*100/persist_rmse:.3f}")
+        print(f"Compared to persistence — R²: {(all_metrics['nn'][horizon]["test_r2"]-persist_r2)*100/persist_r2:.3f}, MAE: {(all_metrics['nn'][horizon]["test_mae"]-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['nn'][horizon]["test_rmse"]-persist_rmse)*100/persist_rmse:.3f}")
 
         # --- Identify today's best model for this horizon ---
         scores = {algo: all_metrics[algo][horizon]["test_mae"] for algo in ["ridge", "rf", "nn"]}
