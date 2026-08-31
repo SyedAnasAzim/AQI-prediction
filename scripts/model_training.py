@@ -82,7 +82,7 @@ def preprocess(raw_df, fg):
 
 
     missing_df = df.loc[missing_rows].copy()
-    missing_df.name = "timestamp"
+    missing_df.index.name = "timestamp"
     fg.insert(missing_df.reset_index()) 
 
     # Time-based features
