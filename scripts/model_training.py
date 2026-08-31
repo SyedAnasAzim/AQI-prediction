@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import hopsworks
 
+from dotenv import load_dotenv
 from datetime import timedelta
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
@@ -35,7 +36,8 @@ def rmse(y_true, y_pred):
 # 1. Fetch raw data from Hopsworks
 # ----------------------------------------------------------------------
 def fetch_raw_data():
-    api_key = os.environ["HOPSWORKS_API_KEY"]
+    load_dotenv()
+    api_key = os.getenv("HOPSWORKS_API_KEY")
 
     project = hopsworks.login(
         project="PearlsAQI_Project",
@@ -64,7 +66,7 @@ def preprocess(raw_df, fg):
 
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df = df.sort_values("timestamp").set_index("timestamp")
-
+    print(df.sample(2).index)
     expected = pd.date_range(
     start=df.index.min(),
     end=df.index.max(),
@@ -77,16 +79,17 @@ def preprocess(raw_df, fg):
     # Reindex to a full hourly range and interpolate short gaps only (limit=2),
     # so longer genuine outages are left as NaN rather than fabricated
     full_index = pd.date_range(df.index.min(), df.index.max(), freq="h")
+    full_index.name = "timestamp" 
     df = df.reindex(full_index)
     df = df.interpolate(method="time", limit=2)
-
+    print(df.sample(2).index)
 
     missing_df = df.loc[missing_rows].copy()
     missing_df.index.name = "timestamp"
     int_cols = ["us_aqi", "relative_humidity_2m", "wind_direction_10m", "cloud_cover"]
     missing_df[int_cols] = missing_df[int_cols].round().astype("int64")
     fg.insert(missing_df.reset_index()) 
-
+    print(df.sample(2).index)
     # Time-based features
     df["month"] = df.index.month - 1
     df["day_of_week"] = df.index.day_of_week
@@ -124,11 +127,13 @@ def preprocess(raw_df, fg):
     df["aqi_t+48h"] = df["us_aqi"].shift(-48)
     df["aqi_t+72h"] = df["us_aqi"].shift(-72)
 
+
+    df = df.drop(columns=["ammonia"])
     # Drop rows with NaNs introduced by lagging/rolling/target-shifting
     # (expected: ~72 rows at the start, ~72 at the end, per the EDA notebook's
     # confirmed-contiguous check)
     df = df.dropna(axis=0)
-
+    print(df.sample(2).index)
     return df
 
 
@@ -137,6 +142,7 @@ def preprocess(raw_df, fg):
 # ----------------------------------------------------------------------
 def apply_rolling_window(df, window_days=ROLLING_WINDOW_DAYS):
     cutoff = df.index.max() - timedelta(days=window_days)
+    print(cutoff)
     return df[df.index >= cutoff]
 
 
@@ -163,7 +169,7 @@ def get_feature_sets(df):
     tree_cols = [c for c in df.columns if c not in tree_drop]
 
     linear_drop = [
-        "city", "hour", "day_of_week", "month", "ammonia",
+        "city", "hour", "day_of_week", "month",
         "wind_direction_10m", "dust"
     ] + HORIZONS
     linear_cols = [c for c in df.columns if c not in linear_drop]
@@ -250,7 +256,7 @@ def main():
             "test_rmse": rmse(y_test, ridge_pred),
         }
         print(f"Ridge (alpha={best_alpha}) — {all_metrics['ridge'][horizon]}")
-
+        print(f"Compared to persistence — R²: {(all_metrics['ridge'][horizon]["r2"]-persist_r2)*100/persist_r2:.3f}, MAE: {(all_metrics['ridge'][horizon]["mae"]-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['ridge'][horizon]["rmse"]-persist_rmse)*100/persist_rmse:.3f}")
         # --- Random Forest ---
         rf_model = RandomForestRegressor(
             n_estimators=200, max_depth=8, min_samples_leaf=20,
@@ -265,7 +271,8 @@ def main():
             "test_rmse": rmse(y_test, rf_pred),
         }
         print(f"Random Forest — {all_metrics['rf'][horizon]}")
-
+        print(f"Compared to persistence — R²: {(all_metrics['ridge'][horizon]["r2"]-persist_r2)*100/persist_r2:.3f}, MAE: {(all_metrics['ridge'][horizon]["mae"]-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['ridge'][horizon]["rmse"]-persist_rmse)*100/persist_rmse:.3f}")
+  
         # --- Neural Network (full retrain, same as Ridge/RF) ---
         tf.random.set_seed(42)
         nn_model = build_nn(X_train_lin.shape[1])
@@ -285,6 +292,7 @@ def main():
             "test_rmse": rmse(y_test, nn_pred),
         }
         print(f"Neural Network — {all_metrics['nn'][horizon]}")
+        print(f"Compared to persistence — R²: {(all_metrics['ridge'][horizon]["r2"]-persist_r2)*100/persist_r2:.3f}, MAE: {(all_metrics['ridge'][horizon]["mae"]-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['ridge'][horizon]["rmse"]-persist_rmse)*100/persist_rmse:.3f}")
 
         # --- Identify today's best model for this horizon ---
         scores = {algo: all_metrics[algo][horizon]["test_mae"] for algo in ["ridge", "rf", "nn"]}
