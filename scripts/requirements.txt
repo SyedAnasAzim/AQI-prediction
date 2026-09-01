@@ -3,3 +3,7 @@ pandas
 requests
 python-dotenv
 hopsworks[python]
+scikit-learn
+tensorflow
+joblib
+shap
