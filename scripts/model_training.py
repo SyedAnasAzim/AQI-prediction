@@ -190,20 +190,12 @@ def build_shap_background_sample(
 
 def save_shap_background_sample(fs, df, tree_cols, linear_cols):
     """
-    Builds and (over)writes the SHAP background sample feature group.
-
-    Stores the union of tree_cols and linear_cols so the hourly inference
-    job can slice/scale it identically to how the live feature row is
-    sliced for each model type (raw for RF, scaled subset for Ridge/NN).
-
-    Uses overwrite=True so this small reference table is replaced each day
-    rather than growing indefinitely — it represents "today's" reference
-    distribution, not a historical log.
+    Builds and saves/overwrites the SHAP background sample feature group.
     """
     feature_cols = sorted(set(tree_cols) | set(linear_cols))
-
     background_df = build_shap_background_sample(df, feature_cols)
 
+    # 1. Fetch or initialize the Feature Group metadata container
     background_fg = fs.get_or_create_feature_group(
         name=SHAP_BACKGROUND_FG_NAME,
         version=SHAP_BACKGROUND_FG_VERSION,
@@ -217,17 +209,22 @@ def save_shap_background_sample(fs, df, tree_cols, linear_cols):
         event_time="timestamp",
     )
 
-    background_fg.insert(
-        background_df,
-        overwrite=True,
-        write_options={"wait_for_job": True},
-    )
+    # 2. Safely create or overwrite depending on if it exists remotely
+    try:
+        # Save registers the feature group schema and inserts the initial dataframe
+        background_fg.save(background_df)
+    except Exception as e:
+        # If it already exists, insert with overwrite
+        background_fg.insert(
+            background_df,
+            overwrite=True,
+            write_options={"wait_for_job": True},
+        )
 
     print(
         f"SHAP background sample saved: {len(background_df)} rows "
         f"to '{SHAP_BACKGROUND_FG_NAME}' v{SHAP_BACKGROUND_FG_VERSION}"
     )
-
 
 # ----------------------------------------------------------------------
 # 6. Main training routine
