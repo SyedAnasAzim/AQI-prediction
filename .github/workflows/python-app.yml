@@ -1,4 +1,4 @@
-name: Update Data
+name: Update Data And Run inference
 on:
     # schedule:
     #     - cron: '3 * * * *'
@@ -24,5 +24,7 @@ jobs:
             - name: Run the update script 
               env:
                 HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
-              run: python scripts/update_data.py
+              run: |
+                  python scripts/update_data.py
+                  python scripts/inference.py
         
