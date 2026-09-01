@@ -14,6 +14,15 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import tensorflow as tf
 from tensorflow.keras import layers, models, callbacks
 
+from feature_engineering import (
+    clean_raw,
+    compute_features,
+    add_targets,
+    get_feature_sets as shared_get_feature_sets,
+    HORIZONS,
+    LAGS,
+)
+
 
 # ----------------------------------------------------------------------
 # Config
@@ -21,11 +30,19 @@ from tensorflow.keras import layers, models, callbacks
 ROLLING_WINDOW_DAYS = 730  # ~2 years — keeps full seasonal coverage; currently a no-op
                             # since the dataset doesn't yet exceed this span, but will
                             # begin trimming the oldest data once it does
-HORIZONS = ["aqi_t+24h", "aqi_t+48h", "aqi_t+72h"]
 RIDGE_ALPHAS = [0.01, 0.1, 1.0, 10.0, 50.0, 100.0, 500.0, 1000.0, 5000.0, 10000.0]
-LAGS = [1, 2, 3, 24, 48, 72]
+
+# HORIZONS and LAGS now live in feature_engineering.py (imported below) so
+# training and inference can never define them differently.
 
 SAVE_ROOT = "saved_models"
+
+# --- SHAP background sample config ---
+SHAP_BACKGROUND_FG_NAME = "shap_background_karachi_aqi"
+SHAP_BACKGROUND_FG_VERSION = 1
+SHAP_BACKGROUND_N_SAMPLES = 150  # target size of the reference sample
+SHAP_STRAT_COLS = ["month", "hour"]  # stratify so all seasons/times of day are represented
+SHAP_RANDOM_STATE = 42
 
 
 def rmse(y_true, y_pred):
@@ -54,86 +71,26 @@ def fetch_raw_data():
 
 
 # ----------------------------------------------------------------------
-# 2. Preprocessing — replicates every step from the EDA/feature-engineering notebook
+# 2. Preprocessing — now delegates to feature_engineering.py, the module
+#    shared with inference.py, so training and serving can never compute
+#    features differently by accident.
 # ----------------------------------------------------------------------
 def preprocess(raw_df, fg):
-    df = raw_df.copy()
+    # Clean + fill short gaps; write back any interpolated rows that were
+    # missing from the raw feature group (unchanged behavior from before).
+    df, missing_df = clean_raw(raw_df)
+    if len(missing_df) > 0:
+        fg.insert(missing_df.reset_index())
 
-    # Drop any Hopsworks-internal index/id columns if present
-    for col in ["Unnamed: 0"]:
-        if col in df.columns:
-            df = df.drop(columns=[col])
+    # Shared feature computation (time-based, derived, rolling, lag, cyclic).
+    df = compute_features(df)
 
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
-    df = df.sort_values("timestamp").set_index("timestamp")
-    print(df.sample(2).index)
-    expected = pd.date_range(
-    start=df.index.min(),
-    end=df.index.max(),
-    freq="h"
-    )
+    # Training-only: create the 3 forecast-horizon targets.
+    df = add_targets(df)
 
-    missing_rows = expected.difference(df.index)
-
-
-    # Reindex to a full hourly range and interpolate short gaps only (limit=2),
-    # so longer genuine outages are left as NaN rather than fabricated
-    full_index = pd.date_range(df.index.min(), df.index.max(), freq="h")
-    full_index.name = "timestamp" 
-    df = df.reindex(full_index)
-    df = df.interpolate(method="time", limit=2)
-    print(df.sample(2).index)
-
-    missing_df = df.loc[missing_rows].copy()
-    missing_df.index.name = "timestamp"
-    int_cols = ["us_aqi", "relative_humidity_2m", "wind_direction_10m", "cloud_cover"]
-    missing_df[int_cols] = missing_df[int_cols].round().astype("int64")
-    fg.insert(missing_df.reset_index()) 
-    print(df.sample(2).index)
-    # Time-based features
-    df["month"] = df.index.month - 1
-    df["day_of_week"] = df.index.day_of_week
-    df["is_weekday"] = (df["day_of_week"] < 5).astype(int)
-
-    df["hour"] = df.index.hour
-
-
-    # AQI change rate — derived feature named explicitly in the project spec
-    df["aqi_change_rate_1h"] = df["us_aqi"].diff(1)
-    df["aqi_change_rate_24h"] = df["us_aqi"].diff(24)
-
-    # Rolling statistics
-    df["rolling_mean_24h"] = df["us_aqi"].rolling(window=24).mean()
-    df["rolling_std_24h"] = df["us_aqi"].rolling(window=24).std()
-
-    # Lag features — chosen from PACF analysis in the EDA notebook (lags 1-3
-    # capture short-term AR structure; 24/48/72 capture daily seasonality and
-    # align with the forecast horizons)
-    for lag in LAGS:
-        df[f"us_aqi_lag{lag}"] = df["us_aqi"].shift(lag)
-
-    # Cyclic encoding for time-based and directional features
-    df["day_of_week_sin"] = np.sin(2 * np.pi * df["day_of_week"] / 7)
-    df["day_of_week_cos"] = np.cos(2 * np.pi * df["day_of_week"] / 7)
-    df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
-    df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
-    df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
-    df["hour_cos"] = np.cos(2 * np.pi * df["hour"] / 24)
-    df["wind_direction_10m_sin"] = np.sin(2 * np.pi * df["wind_direction_10m"] / 360)
-    df["wind_direction_10m_cos"] = np.cos(2 * np.pi * df["wind_direction_10m"] / 360)
-
-    # Targets — shifted forward for each forecast horizon
-    df["aqi_t+24h"] = df["us_aqi"].shift(-24)
-    df["aqi_t+48h"] = df["us_aqi"].shift(-48)
-    df["aqi_t+72h"] = df["us_aqi"].shift(-72)
-
-
-    df = df.drop(columns=["ammonia"])
     # Drop rows with NaNs introduced by lagging/rolling/target-shifting
-    # (expected: ~72 rows at the start, ~72 at the end, per the EDA notebook's
-    # confirmed-contiguous check)
+    # (expected: ~72 rows at the start, ~72 at the end).
     df = df.dropna(axis=0)
-    print(df.sample(2).index)
     return df
 
 
@@ -163,18 +120,11 @@ def time_based_split(df):
 
 # ----------------------------------------------------------------------
 # 5. Feature set definitions (Set A: tree-based, Set B: linear/NN scaled)
+#    Delegates to feature_engineering.py so training and inference always
+#    slice features identically.
 # ----------------------------------------------------------------------
 def get_feature_sets(df):
-    tree_drop = ["city", "day"] + HORIZONS
-    tree_cols = [c for c in df.columns if c not in tree_drop]
-
-    linear_drop = [
-        "city", "hour", "day_of_week", "month",
-        "wind_direction_10m", "dust"
-    ] + HORIZONS
-    linear_cols = [c for c in df.columns if c not in linear_drop]
-
-    return tree_cols, linear_cols
+    return shared_get_feature_sets(df)
 
 
 def build_nn(input_dim):
@@ -197,6 +147,89 @@ def build_nn(input_dim):
 
 
 # ----------------------------------------------------------------------
+# 5b. SHAP background/reference sample
+# ----------------------------------------------------------------------
+def build_shap_background_sample(
+    df,
+    feature_cols,
+    strat_cols=SHAP_STRAT_COLS,
+    n_samples=SHAP_BACKGROUND_N_SAMPLES,
+    random_state=SHAP_RANDOM_STATE,
+):
+    """
+    Draws a small, seasonally-representative sample of engineered feature rows
+    to serve as the SHAP background/reference distribution at inference time.
+
+    Why not just use a rolling window of recent hours at inference time:
+    - Recent hours are highly autocorrelated (not independent samples), which
+      biases LinearExplainer's covariance estimate.
+    - A short recent window has no seasonal coverage (e.g. dust storms vs.
+      winter smog vs. monsoon humidity effects), so "typical" ends up meaning
+      "whatever conditions looked like this week."
+    - The SHAP base value (expected model output over the background set)
+      would drift hour to hour instead of representing a stable reference,
+      making SHAP values hard to compare across different prediction runs.
+
+    Strategy: take one row per (month, hour) bucket so the full seasonal /
+    diurnal cycle is represented, then subsample down to n_samples if that
+    produced more rows than needed. This is refreshed once a day (each
+    training run), matching the daily retrain cadence.
+    """
+    sampled = (
+        df.groupby(strat_cols, group_keys=False)
+        .apply(lambda g: g.sample(n=1, random_state=random_state))
+    )
+
+    if len(sampled) > n_samples:
+        sampled = sampled.sample(n=n_samples, random_state=random_state)
+
+    sampled = sampled[feature_cols].copy()
+    sampled = sampled.reset_index()  # brings "timestamp" back as a column
+    return sampled
+
+
+def save_shap_background_sample(fs, df, tree_cols, linear_cols):
+    """
+    Builds and (over)writes the SHAP background sample feature group.
+
+    Stores the union of tree_cols and linear_cols so the hourly inference
+    job can slice/scale it identically to how the live feature row is
+    sliced for each model type (raw for RF, scaled subset for Ridge/NN).
+
+    Uses overwrite=True so this small reference table is replaced each day
+    rather than growing indefinitely — it represents "today's" reference
+    distribution, not a historical log.
+    """
+    feature_cols = sorted(set(tree_cols) | set(linear_cols))
+
+    background_df = build_shap_background_sample(df, feature_cols)
+
+    background_fg = fs.get_or_create_feature_group(
+        name=SHAP_BACKGROUND_FG_NAME,
+        version=SHAP_BACKGROUND_FG_VERSION,
+        description=(
+            "Stratified (month, hour) sample of engineered feature rows, "
+            "used as the SHAP background/reference distribution for "
+            "LinearExplainer/KernelExplainer at inference time. "
+            "Refreshed daily by the training pipeline."
+        ),
+        primary_key=["timestamp"],
+        event_time="timestamp",
+    )
+
+    background_fg.insert(
+        background_df,
+        overwrite=True,
+        write_options={"wait_for_job": True},
+    )
+
+    print(
+        f"SHAP background sample saved: {len(background_df)} rows "
+        f"to '{SHAP_BACKGROUND_FG_NAME}' v{SHAP_BACKGROUND_FG_VERSION}"
+    )
+
+
+# ----------------------------------------------------------------------
 # 6. Main training routine
 # ----------------------------------------------------------------------
 def main():
@@ -212,6 +245,10 @@ def main():
 
     train, val, test = time_based_split(df)
     tree_cols, linear_cols = get_feature_sets(df)
+
+    print("Building SHAP background sample...")
+    fs = project.get_feature_store()
+    save_shap_background_sample(fs, df, tree_cols, linear_cols)
 
     X_train_rf, X_val_rf, X_test_rf = train[tree_cols], val[tree_cols], test[tree_cols]
     X_train_lin = train[linear_cols].copy()
