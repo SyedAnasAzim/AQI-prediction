@@ -83,16 +83,24 @@ def connect():
 
 
 def fetch_raw_window(fs, window_hours=RAW_WINDOW_HOURS):
-    """Pulls only the trailing `window_hours` of raw data — enough to
-    compute a valid current-hour feature row, without re-reading the
-    full multi-year history the training job uses."""
+    """
+    Pulls the raw karachi_aqi feature group and slices to the trailing
+    `window_hours` locally in pandas.
+
+    Deliberately NOT using fg.select_all().filter(...).read() here — that
+    routes through Hopsworks' Arrow Flight "Query Service" for server-side
+    filtering, which raised a generic FeatureStoreException on this
+    cluster (Query Service unavailable/misconfigured). Plain fg.read()
+    uses the same read path already proven working in model_training.py,
+    so we filter to the window ourselves after the fact instead.
+    """
     fg = fs.get_feature_group(name="karachi_aqi", version=1)
-    cutoff = datetime.utcnow() - timedelta(hours=window_hours)
-    # Query API: filter by timestamp then read. If your Hopsworks client
-    # version doesn't support fg.filter(...).read() this way, fall back to
-    # fg.read() and slice with df[df.timestamp >= cutoff] instead.
-    query = fg.select_all().filter(fg.timestamp >= cutoff)
-    raw_df = query.read()
+    raw_df = fg.read()
+
+    raw_df["timestamp"] = pd.to_datetime(raw_df["timestamp"])
+    cutoff = raw_df["timestamp"].max() - pd.Timedelta(hours=window_hours)
+    raw_df = raw_df[raw_df["timestamp"] >= cutoff].reset_index(drop=True)
+
     return raw_df, fg
 
 
@@ -277,6 +285,11 @@ def backfill_actuals(fs, predictions_fg, raw_df):
     and, for any prediction rows whose target_timestamp equals that hour
     and whose actual_aqi is still null, re-inserts them with actual_aqi
     filled in. Relies on upsert-by-primary-key (see module docstring).
+
+    Uses a plain fg.read() + local pandas filter rather than
+    .select_all().filter().read(), since the latter routes through
+    Hopsworks' Arrow Flight Query Service, which raised a generic
+    FeatureStoreException on this cluster.
     """
     df, _ = clean_raw(raw_df)
     if df.empty:
@@ -284,10 +297,11 @@ def backfill_actuals(fs, predictions_fg, raw_df):
     latest_actual_ts = df.index.max()
     latest_actual_value = df.loc[latest_actual_ts, "us_aqi"]
 
-    query = predictions_fg.select_all().filter(
-        predictions_fg.target_timestamp == latest_actual_ts
-    )
-    existing = query.read()
+    existing = predictions_fg.read()
+    if existing.empty:
+        return
+    existing["target_timestamp"] = pd.to_datetime(existing["target_timestamp"])
+    existing = existing[existing["target_timestamp"] == latest_actual_ts]
     if existing.empty:
         return
 
