@@ -210,14 +210,16 @@ def main():
         ))
 
         # Predictions trace
-        fig.add_trace(go.Scatter(
-            x=latest_preds["target_timestamp"],
-            y=latest_preds["predicted_aqi"],
-            mode="markers+lines",
-            name="Model Predictions",
-            marker=dict(size=10, color="#ff7f0e"),
-            line=dict(dash="dash")
-        ))
+        hori_color = {"aqi_t+24h":"#ff7f0e","aqi_t+48h":"#ad0707","aqi_t+72h":"#5805e8"}
+        for hori, group in df_preds.groupby("horizon"):
+            fig.add_trace(go.Scatter(
+                x=group["target_timestamp"],
+                y=group["predicted_aqi"],
+                mode="markers+lines",
+                name=f"Model predictionds {hori}",  
+                marker=dict(size=10, color=hori_color[hori]),
+                line=dict(dash="dash")
+            ))
 
         fig.update_layout(
             xaxis_title="Timestamp (Karachi Time)",
