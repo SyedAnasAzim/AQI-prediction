@@ -1,0 +1,4 @@
+prediction_made_at,target_timestamp,horizon,lead_time_days,predicted_aqi,model_used,model_version,actual_aqi
+2026-09-02 12:39:38.052430,2026-09-03 17:00:00,aqi_t+24h,1,71.37578582763672,nn,7,
+2026-09-02 12:39:38.052430,2026-09-04 17:00:00,aqi_t+48h,2,74.87188720703125,nn,7,
+2026-09-02 12:39:38.052430,2026-09-05 17:00:00,aqi_t+72h,3,75.39492695749263,rf,7,
