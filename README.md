@@ -397,7 +397,7 @@ Users can select a forecast horizon from the dashboard and inspect:
 | SHAP             | Model explainability            |
 | Streamlit        | Web dashboard                   |
 | Plotly           | Interactive visualization       |
-| Hopsworks        | Feature Store                   |
+| Hopsworks        | Feature Store & Model Registery |
 | GitHub Actions   | Workflow automation             |
 | Jupyter Notebook | Data analysis & experimentation |
 
