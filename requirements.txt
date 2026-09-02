@@ -4,7 +4,7 @@ numpy
 requests
 scikit-learn
 tensorflow
-hopsworks
+hopsworks[python]
 python-dotenv
 plotly
 joblib
