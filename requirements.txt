@@ -5,6 +5,7 @@ requests
 scikit-learn
 tensorflow
 hopsworks[python]
+nest_asyncio
 python-dotenv
 plotly
 joblib
