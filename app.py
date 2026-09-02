@@ -231,95 +231,95 @@ def main():
     # ------------------------------------------------------------------
     # 3. SHAP Feature Drivers Section
     # ------------------------------------------------------------------
-   with col_shap:
-    st.subheader("🔍 Prediction Drivers (SHAP Values)")
-
-    selected_horizon = st.selectbox(
-        "Select Horizon to view drivers:",
-        horizons
-    )
-
-    target_ts_horizon = latest_preds[
-        latest_preds["horizon"] == selected_horizon
-    ]["target_timestamp"].iloc[0]
-
-    # Make timestamps comparable
-    target_ts_horizon = pd.to_datetime(target_ts_horizon)
-
-    # Filter SHAP data
-    shap_row = df_shap[
-        (df_shap["horizon"] == selected_horizon) &
-        (
-            pd.to_datetime(df_shap["target_timestamp"]) ==
-            target_ts_horizon
+    with col_shap:
+        st.subheader("🔍 Prediction Drivers (SHAP Values)")
+    
+        selected_horizon = st.selectbox(
+            "Select Horizon to view drivers:",
+            horizons
         )
-    ].copy()
-
-    if not shap_row.empty:
-
-        # --------------------------------
-        # SHAP data is already long format
-        # --------------------------------
-
-        df_shap_plot = shap_row[
-            ["feature_name", "shap_value"]
+    
+        target_ts_horizon = latest_preds[
+            latest_preds["horizon"] == selected_horizon
+        ]["target_timestamp"].iloc[0]
+    
+        # Make timestamps comparable
+        target_ts_horizon = pd.to_datetime(target_ts_horizon)
+    
+        # Filter SHAP data
+        shap_row = df_shap[
+            (df_shap["horizon"] == selected_horizon) &
+            (
+                pd.to_datetime(df_shap["target_timestamp"]) ==
+                target_ts_horizon
+            )
         ].copy()
-
-        # Make sure SHAP values are numeric
-        df_shap_plot["shap_value"] = pd.to_numeric(
-            df_shap_plot["shap_value"],
-            errors="coerce"
-        )
-
-        # Remove invalid values
-        df_shap_plot = df_shap_plot.dropna(
-            subset=["shap_value"]
-        )
-
-        # Calculate absolute impact for ranking
-        df_shap_plot["abs_impact"] = (
-            df_shap_plot["shap_value"].abs()
-        )
-
-        # Get top 8 features
-        df_shap_plot = (
-            df_shap_plot
-            .sort_values("abs_impact", ascending=False)
-            .head(8)
-        )
-
-        # --------------------------------
-        # Plot
-        # --------------------------------
-
-        fig_shap = px.bar(
-            df_shap_plot.sort_values("shap_value"),
-            x="shap_value",
-            y="feature_name",
-            orientation="h",
-            color="shap_value",
-            color_continuous_scale="RdBu_r",
-            title=f"Top Features Influencing {selected_horizon.upper()} Forecast",
-            labels={
-                "feature_name": "Feature",
-                "shap_value": "SHAP Impact"
-            }
-        )
-
-        fig_shap.update_layout(
-            yaxis=dict(autorange="reversed"),
-            margin=dict(l=0, r=0, t=50, b=0)
-        )
-
-        st.plotly_chart(
-            fig_shap,
-            use_container_width=True
-        )
-
-    else:
-        st.info(
-            "No SHAP values logged for the selected horizon yet."
-        )
+    
+        if not shap_row.empty:
+    
+            # --------------------------------
+            # SHAP data is already long format
+            # --------------------------------
+    
+            df_shap_plot = shap_row[
+                ["feature_name", "shap_value"]
+            ].copy()
+    
+            # Make sure SHAP values are numeric
+            df_shap_plot["shap_value"] = pd.to_numeric(
+                df_shap_plot["shap_value"],
+                errors="coerce"
+            )
+    
+            # Remove invalid values
+            df_shap_plot = df_shap_plot.dropna(
+                subset=["shap_value"]
+            )
+    
+            # Calculate absolute impact for ranking
+            df_shap_plot["abs_impact"] = (
+                df_shap_plot["shap_value"].abs()
+            )
+    
+            # Get top 8 features
+            df_shap_plot = (
+                df_shap_plot
+                .sort_values("abs_impact", ascending=False)
+                .head(8)
+            )
+    
+            # --------------------------------
+            # Plot
+            # --------------------------------
+    
+            fig_shap = px.bar(
+                df_shap_plot.sort_values("shap_value"),
+                x="shap_value",
+                y="feature_name",
+                orientation="h",
+                color="shap_value",
+                color_continuous_scale="RdBu_r",
+                title=f"Top Features Influencing {selected_horizon.upper()} Forecast",
+                labels={
+                    "feature_name": "Feature",
+                    "shap_value": "SHAP Impact"
+                }
+            )
+    
+            fig_shap.update_layout(
+                yaxis=dict(autorange="reversed"),
+                margin=dict(l=0, r=0, t=50, b=0)
+            )
+    
+            st.plotly_chart(
+                fig_shap,
+                use_container_width=True
+            )
+    
+        else:
+            st.info(
+                "No SHAP values logged for the selected horizon yet."
+            )
     # ------------------------------------------------------------------
     # 4. Footer & Model Information
     # ------------------------------------------------------------------
