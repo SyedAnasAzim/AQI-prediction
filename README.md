@@ -102,9 +102,7 @@ AQI-prediction/
 │   ├── historical_data_script.py
 │   ├── inference.py
 │   ├── model_training.py
-│   ├── prediction_logger.py
 │   ├── update_data.py
-│   ├── requirements.txt
 │   ├── requirements_inference.txt
 │   └── requirements_update_data.txt
 │
