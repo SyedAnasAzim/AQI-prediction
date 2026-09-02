@@ -264,7 +264,7 @@ def main():
                 color_continuous_scale="RdBu_r",
                 title=f"Top Features Influencing {selected_horizon.upper()} Forecast"
             )
-            fig_shap.update_layout(yaxis=dict(autorange="reverse"), margin=dict(l=0, r=0, t=30, b=0))
+            fig_shap.update_layout(yaxis=dict(autorange="reversed"), margin=dict(l=0, r=0, t=30, b=0))
             st.plotly_chart(fig_shap, use_container_width=True)
         else:
             st.info("No SHAP values logged for the selected horizon yet.")
