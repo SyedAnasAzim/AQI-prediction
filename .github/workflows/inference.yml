@@ -25,7 +25,7 @@ jobs:
             - name: Install dependencies
               run: |
                 python -m pip install --upgrade pip
-                pip install -r scripts/requirements.txt
+                pip install -r scripts/requirements_inference.txt
 
             - name: Run the Inference script 
               env:
