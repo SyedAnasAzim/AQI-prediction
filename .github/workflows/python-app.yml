@@ -1,4 +1,4 @@
-name: Update Data And Run inference
+name: Update Data 
 on:
     # schedule:
     #     - cron: '3 * * * *'
