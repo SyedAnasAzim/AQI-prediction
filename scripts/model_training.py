@@ -213,7 +213,6 @@ def save_shap_background_sample(fs, df, tree_cols, linear_cols):
     # "save" step needed or exists for data in hsfs.
     background_fg.insert(
         background_df,
-        overwrite=True,
         write_options={"wait_for_job": True},
     )
 
