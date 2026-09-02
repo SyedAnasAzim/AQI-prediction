@@ -1,4 +1,5 @@
 import os
+import time
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -15,7 +16,25 @@ st.set_page_config(
 
 load_dotenv()
 
-# --- HOPSWORKS CONNECTION (Cached for speed) ---
+
+# --- RECOVERY & RETRY LOGIC ---
+def retry(fn, *, retries=3, delay=10, backoff=2, label="operation"):
+    """Retry fn() on exception with exponential backoff."""
+    last_exc = None
+    current_delay = delay
+    for attempt in range(1, retries + 1):
+        try:
+            return fn()
+        except Exception as e:
+            last_exc = e
+            st.warning(f"[{label}] Attempt {attempt}/{retries} failed: {e}")
+            if attempt < retries:
+                time.sleep(current_delay)
+                current_delay *= backoff
+    raise last_exc
+
+
+# --- HOPSWORKS CONNECTION (Cached for speed with Retries) ---
 @st.cache_resource(show_spinner="Connecting to Hopsworks Feature Store...")
 def get_hopsworks_project():
     api_key = st.secrets["HOPSWORKS_API_KEY"]
@@ -23,30 +42,48 @@ def get_hopsworks_project():
         st.error("`HOPSWORKS_API_KEY` environment variable not found!")
         st.stop()
 
-    project = hopsworks.login(
-        project="PearlsAQI_Project",
-        host="eu-west.cloud.hopsworks.ai",
-        port=443,
-        api_key_value=api_key,
-    )
-    return project
+    def _login():
+        return hopsworks.login(
+            project="PearlsAQI_Project",
+            host="eu-west.cloud.hopsworks.ai",
+            port=443,
+            api_key_value=api_key,
+        )
+
+    return retry(_login, retries=3, delay=5, label="Hopsworks Login")
+
 
 @st.cache_data(ttl=300, show_spinner="Fetching latest predictions & actuals...")
 def load_data():
     project = get_hopsworks_project()
-    fs = project.get_feature_store()
+    fs = retry(lambda: project.get_feature_store(), retries=2, label="Get Feature Store")
 
-    # 1. Fetch Latest Forecasts & Models
-    
-    df_preds = pd.read_csv("predictions_log.csv")
+    # 1. Fetch Predictions from Local Repository CSV
+    csv_file = "predictions_log.csv"
+    if not os.path.exists(csv_file):
+        csv_file = "predictions.csv"
 
-    # 2. Fetch Latest SHAP Values
-    shap_fg = fs.get_feature_group(name="aqi_shap_values", version=1)
-    df_shap = shap_fg.read()
+    if os.path.exists(csv_file):
+        df_preds = pd.read_csv(csv_file)
+    else:
+        df_preds = pd.DataFrame(columns=[
+            "prediction_made_at", "target_timestamp", "horizon", 
+            "predicted_aqi", "model_used", "model_version"
+        ])
 
-    # 3. Fetch Raw/Actual AQI Data for Karachi
-    raw_fg = fs.get_feature_group(name="karachi_aqi", version=1)
-    df_actuals = raw_fg.read()
+    # 2. Fetch Latest SHAP Values from Hopsworks with Retry
+    def _read_shap():
+        fg = fs.get_feature_group(name="aqi_shap_values", version=1)
+        return fg.read()
+
+    df_shap = retry(_read_shap, retries=3, delay=10, label="Read SHAP Feature Group")
+
+    # 3. Fetch Raw/Actual AQI Data for Karachi from Hopsworks with Retry
+    def _read_actuals():
+        fg = fs.get_feature_group(name="karachi_aqi", version=1)
+        return fg.read()
+
+    df_actuals = retry(_read_actuals, retries=3, delay=10, label="Read Actuals Feature Group")
 
     return df_preds, df_shap, df_actuals
 
@@ -69,15 +106,17 @@ def get_aqi_status(aqi_val):
 
 # --- MAIN APP LAYOUT ---
 def main():
-    # Header
     st.title("🌫️ Karachi Air Quality Index (AQI) Forecast")
     st.caption("Live hourly machine learning forecasts powered by Hopsworks, Open-Meteo API, Ridge, Random Forest, and Neural Networks.")
-    st.markdown("---")
-    st.write("Hopsworks version:", hopsworks.__version__)
+
     try:
         df_preds, df_shap, df_actuals = load_data()
     except Exception as e:
-        st.error(f"Failed to load data from Hopsworks: {e}")
+        st.error(f"Failed to load data from Hopsworks or CSV log: {e}")
+        return
+
+    if df_preds.empty:
+        st.warning("No predictions found in local CSV log. Please ensure `inference.py` has run.")
         return
 
     # Clean & sort dataframes
@@ -85,14 +124,47 @@ def main():
     df_preds["prediction_made_at"] = pd.to_datetime(df_preds["prediction_made_at"])
     df_actuals["timestamp"] = pd.to_datetime(df_actuals["timestamp"])
 
-    # ------------------------------------------------------------------
-    # 1. Top Section: Forecast Cards (Latest predictions per horizon)
-    # ------------------------------------------------------------------
-    st.subheader("📍 Current Air Quality Forecasts for Karachi")
-    
-    # Get the most recent inference run predictions
+    # Extract latest predictions
     latest_run_time = df_preds["prediction_made_at"].max()
     latest_preds = df_preds[df_preds["prediction_made_at"] == latest_run_time]
+
+    # ------------------------------------------------------------------
+    # AQI DYNAMIC ALERT BANNER
+    # ------------------------------------------------------------------
+    max_predicted_aqi = latest_preds["predicted_aqi"].max()
+    peak_row = latest_preds[latest_preds["predicted_aqi"] == max_predicted_aqi].iloc[0]
+    peak_horizon = peak_row["horizon"].upper()
+    peak_time = peak_row["target_timestamp"].strftime("%Y-%m-%d %H:%M")
+
+    if max_predicted_aqi > 200:
+        st.error(
+            f"🚨 **SEVERE AQI ALERT:** Peak predicted AQI reaches **{round(max_predicted_aqi, 1)}** "
+            f"(Very Unhealthy/Hazardous) for the **{peak_horizon}** forecast ({peak_time}). "
+            f"Avoid outdoor activities and wear an N95 mask!"
+        )
+    elif max_predicted_aqi > 150:
+        st.warning(
+            f"⚠️ **UNHEALTHY AQI WARNING:** Peak predicted AQI is **{round(max_predicted_aqi, 1)}** "
+            f"for the **{peak_horizon}** forecast ({peak_time}). "
+            f"Sensitive groups (children, elderly, asthmatics) should stay indoors."
+        )
+    elif max_predicted_aqi > 100:
+        st.info(
+            f"🟡 **MODERATE TO SENSITIVE AQI ADVISORY:** Forecasted AQI peaks at **{round(max_predicted_aqi, 1)}** "
+            f"for the **{peak_horizon}** forecast. Air quality is acceptable, but sensitive individuals may feel slight discomfort."
+        )
+    else:
+        st.success(
+            f"🟢 **GOOD AIR QUALITY:** Forecasted AQI remains safe at or below **{round(max_predicted_aqi, 1)}** "
+            f"across all upcoming horizons."
+        )
+
+    st.markdown("---")
+
+    # ------------------------------------------------------------------
+    # 1. Top Section: Forecast Cards
+    # ------------------------------------------------------------------
+    st.subheader("📍 Current Air Quality Forecasts for Karachi")
 
     horizons = sorted(latest_preds["horizon"].unique())
     cols = st.columns(len(horizons) if len(horizons) > 0 else 1)
@@ -100,7 +172,7 @@ def main():
     for i, horizon in enumerate(horizons):
         row = latest_preds[latest_preds["horizon"] == horizon].iloc[0]
         aqi_val = round(row["predicted_aqi"], 1)
-        model_used = row["model_used"]  # e.g., 'ridge', 'rf', 'nn'
+        model_used = row["model_used"]
         model_ver = row["model_version"]
         target_ts = row["target_timestamp"].strftime("%Y-%m-%d %H:%M")
 
@@ -125,11 +197,10 @@ def main():
     with col_chart:
         st.subheader("📈 AQI Trend: Actual vs Forecast")
         
-        # Plot actuals + predictions
         fig = go.Figure()
 
-        # Actual AQI trace
-        recent_actuals = df_actuals.sort_values("timestamp").tail(168)  # last 7 days
+        # Actual AQI trace (last 7 days)
+        recent_actuals = df_actuals.sort_values("timestamp").tail(168)
         fig.add_trace(go.Scatter(
             x=recent_actuals["timestamp"],
             y=recent_actuals["us_aqi"],
@@ -138,7 +209,7 @@ def main():
             line=dict(color="#1f77b4", width=2)
         ))
 
-        # Latest predictions trace
+        # Predictions trace
         fig.add_trace(go.Scatter(
             x=latest_preds["target_timestamp"],
             y=latest_preds["predicted_aqi"],
@@ -165,14 +236,14 @@ def main():
         
         selected_horizon = st.selectbox("Select Horizon to view drivers:", horizons)
         
-        # Get matching SHAP row
+        target_ts_horizon = latest_preds[latest_preds["horizon"] == selected_horizon]["target_timestamp"].iloc[0]
+        
         shap_row = df_shap[
             (df_shap["horizon"] == selected_horizon) & 
-            (pd.to_datetime(df_shap["target_timestamp"]) == latest_preds[latest_preds["horizon"] == selected_horizon]["target_timestamp"].iloc[0])
+            (pd.to_datetime(df_shap["target_timestamp"]) == target_ts_horizon)
         ]
 
         if not shap_row.empty:
-            # Parse top SHAP features (excluding non-feature metadata columns)
             ignore_cols = ["timestamp", "target_timestamp", "horizon", "prediction_made_at"]
             feature_impacts = {
                 col: shap_row[col].values[0] 
@@ -180,12 +251,9 @@ def main():
                 if col not in ignore_cols and pd.notna(shap_row[col].values[0])
             }
             
-            # Sort top 8 highest absolute impacts
-            df_shap_plot = (
-                pd.DataFrame(list(feature_impacts.items()), columns=["Feature", "SHAP Impact"])
-                .reindex(df_shap_plot["SHAP Impact"].abs().sort_values(ascending=False).index)
-                .head(8)
-            )
+            df_shap_plot = pd.DataFrame(list(feature_impacts.items()), columns=["Feature", "SHAP Impact"])
+            df_shap_plot["abs_impact"] = df_shap_plot["SHAP Impact"].abs()
+            df_shap_plot = df_shap_plot.sort_values("abs_impact", ascending=False).head(8)
 
             fig_shap = px.bar(
                 df_shap_plot,
@@ -215,6 +283,7 @@ def main():
             - **Neural Network** (Multi-Layer Perceptron trained in TensorFlow/Keras)
         - **Daily Retraining:** The highest performing model per forecast horizon is automatically tagged `[BEST TODAY]` and selected by the `inference.py` script.
         """)
+
 
 if __name__ == "__main__":
     main()
