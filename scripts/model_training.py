@@ -195,7 +195,6 @@ def save_shap_background_sample(fs, df, tree_cols, linear_cols):
     feature_cols = sorted(set(tree_cols) | set(linear_cols))
     background_df = build_shap_background_sample(df, feature_cols)
 
-    # 1. Fetch or initialize the Feature Group metadata container
     background_fg = fs.get_or_create_feature_group(
         name=SHAP_BACKGROUND_FG_NAME,
         version=SHAP_BACKGROUND_FG_VERSION,
@@ -209,17 +208,14 @@ def save_shap_background_sample(fs, df, tree_cols, linear_cols):
         event_time="timestamp",
     )
 
-    # 2. Safely create or overwrite depending on if it exists remotely
-    try:
-        # Save registers the feature group schema and inserts the initial dataframe
-        background_fg.save(background_df)
-    except Exception as e:
-        # If it already exists, insert with overwrite
-        background_fg.insert(
-            background_df,
-            overwrite=True,
-            write_options={"wait_for_job": True},
-        )
+    # insert() handles both first-time registration (creates the group's
+    # schema from this dataframe) and subsequent writes — no separate
+    # "save" step needed or exists for data in hsfs.
+    background_fg.insert(
+        background_df,
+        overwrite=True,
+        write_options={"wait_for_job": True},
+    )
 
     print(
         f"SHAP background sample saved: {len(background_df)} rows "
