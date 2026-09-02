@@ -2,6 +2,7 @@ name: Run Inference
 on:
     # schedule:
     #     - cron: '3 * * * *'
+    workflow_dispatch:
     workflow_run:
       workflows: ["Update Data"]
       types:
