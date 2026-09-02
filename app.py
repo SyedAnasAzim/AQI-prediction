@@ -252,7 +252,7 @@ def main():
             }
             
             df_shap_plot = pd.DataFrame(list(feature_impacts.items()), columns=["Feature", "SHAP Impact"])
-            df_shap_plot["abs_impact"] = df_shap_plot["SHAP Impact"].abs()
+            df_shap_plot["abs_impact"] = pd.to_numeric(df_shap_plot["SHAP Impact"],errors="coerce").abs()
             df_shap_plot = df_shap_plot.sort_values("abs_impact", ascending=False).head(8)
 
             fig_shap = px.bar(
