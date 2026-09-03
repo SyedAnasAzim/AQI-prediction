@@ -215,7 +215,7 @@ def main():
             fig.add_trace(go.Scatter(
                 x=group["target_timestamp"],
                 y=group["predicted_aqi"],
-                mode="markers+lines",
+                mode="lines",
                 name=f"Model predictionds {hori}",  
                 marker=dict(size=10, color=hori_color[hori]),
                 line=dict(dash="dash")
