@@ -11,7 +11,7 @@ permissions:
     contents: write
     
 jobs: 
-    update: 
+    inference: 
         runs-on: ubuntu-latest
         steps:
             - name: Checkout code
