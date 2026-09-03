@@ -120,9 +120,9 @@ def main():
         return
 
     # Clean & sort dataframes
-    df_preds["target_timestamp"] = pd.to_datetime(df_preds["target_timestamp"])
-    df_preds["prediction_made_at"] = pd.to_datetime(df_preds["prediction_made_at"])
-    df_actuals["timestamp"] = pd.to_datetime(df_actuals["timestamp"])
+    df_preds["target_timestamp"] = pd.to_datetime(df_preds["target_timestamp"],format="mixed",errors="coerce")
+    df_preds["prediction_made_at"] = pd.to_datetime(df_preds["prediction_made_at"],format="mixed",errors="coerce")
+    df_actuals["timestamp"] = pd.to_datetime(df_actuals["timestamp"],format="mixed",errors="coerce")
 
     # Extract latest predictions
     latest_run_time = df_preds["prediction_made_at"].max()
