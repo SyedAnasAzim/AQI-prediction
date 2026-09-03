@@ -5,11 +5,13 @@ An end-to-end machine learning system for **Air Quality Index (AQI) prediction a
 The project combines historical air-quality and weather data, feature engineering, machine learning models, explainable AI, cloud-based feature storage, and automated inference to provide an interactive AQI forecasting dashboard.
 
 ---
+
 ## 🌐 Live Demo
 
 🚀 **[Launch the AQI Prediction Dashboard](https://aqi-prediction-thllfdfr9tjdsjv9ogjzve.streamlit.app/)**
 
 Explore real-time AQI predictions, historical trends, prediction drivers, and air-quality insights for Karachi.
+
 ---
 
 ## 📌 Overview
