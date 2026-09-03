@@ -214,7 +214,7 @@ def main():
         for hori, group in df_preds.groupby("horizon"):
             fig.add_trace(go.Scatter(
                 x=group["target_timestamp"],
-                y=group["predicted_aqi"],
+                y=group["predicted_aqi"].round(2),
                 mode="lines+markers",
                 name=f"Model predictionds {hori}",  
                 marker=dict(size=4, color=hori_color[hori]),
