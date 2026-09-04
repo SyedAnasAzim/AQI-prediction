@@ -82,7 +82,7 @@ def load_data():
     # 3. Fetch Raw/Actual AQI Data for Karachi from Hopsworks with Retry
     def _read_actuals():
         fg = fs.get_feature_group(name="karachi_aqi", version=1)
-        return fg.fliter(fg.timestamp >= datetime.now() - timedelta(days=5)).read()
+        return fg.filter(fg.timestamp >= datetime.now() - timedelta(days=5)).read()
 
     df_actuals = retry(_read_actuals, retries=3, delay=10, label="Read Actuals Feature Group")
 
