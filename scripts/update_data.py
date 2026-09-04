@@ -35,6 +35,23 @@ params_weather = {
     "timezone": "auto",
 }
 
+def retry(fn, *, retries=3, delay=10, backoff=2, label="operation"):
+    """Retry fn() on exception, waiting `delay` seconds and increasing by `backoff` each time."""
+    last_exc = None
+    current_delay = delay
+    for attempt in range(1, retries + 1):
+        try:
+            return fn()
+        except Exception as e:
+            last_exc = e
+            print(f"[{label}] attempt {attempt}/{retries} failed: {e}")
+            if attempt < retries:
+                print(f"[{label}] retrying in {current_delay}s...")
+                time.sleep(current_delay)
+                current_delay *= backoff
+    raise last_exc
+
+
 resp_aqi = requests.get(AIR_QUALITY_URL, params=params_aqi, timeout=30)
 resp_weather = requests.get(WEATHER_URL, params=params_weather, timeout=30)
 
@@ -61,21 +78,6 @@ print(json.dumps(resp_aqi.json()["current"], indent=4))
 print(json.dumps(resp_weather.json()["current"], indent=4))
 
 
-def retry(fn, *, retries=3, delay=10, backoff=2, label="operation"):
-    """Retry fn() on exception, waiting `delay` seconds and increasing by `backoff` each time."""
-    last_exc = None
-    current_delay = delay
-    for attempt in range(1, retries + 1):
-        try:
-            return fn()
-        except Exception as e:
-            last_exc = e
-            print(f"[{label}] attempt {attempt}/{retries} failed: {e}")
-            if attempt < retries:
-                print(f"[{label}] retrying in {current_delay}s...")
-                time.sleep(current_delay)
-                current_delay *= backoff
-    raise last_exc
 
 
 # --- Hopsworks login with retry ---
