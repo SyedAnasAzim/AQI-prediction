@@ -87,7 +87,7 @@ def fetch_raw_data():
 
     fs = project.get_feature_store()
     fg = fs.get_feature_group(name="karachi_aqi", version=1)
-    df = retry(df.read, retries=3, delay=10, backoff=2, label="Reading")
+    df = retry(fg.read, retries=3, delay=10, backoff=2, label="Reading")
     # df = fg.read()
 
     return project, df, fg
