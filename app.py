@@ -430,7 +430,8 @@ def main():
         st.plotly_chart(fig, use_container_width=True)
 
     with col_shap:
-        st.markdown("### What's Driving This")
+        st.markdown("### What's Driving This (SHAP)")
+        st.caption("SHAP values show how much each factor pushed this prediction up or down.")
         selected_horizon = st.selectbox(
             "Horizon", horizons, format_func=lambda h: HORIZON_LABELS.get(h, h)
         )
