@@ -326,7 +326,58 @@ def main():
             )
 
     st.markdown("---")
+    with st.container(border=True):
 
+        # First row
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric(
+                "Temperature",
+                f"{latest_actual_row['temperature_2m']} °C"
+            )
+
+        with col2:
+            st.metric(
+                "Humidity",
+                f"{latest_actual_row['relative_humidity_2m']} %"
+            )
+
+        with col3:
+            st.metric(
+                "Wind Speed",
+                f"{latest_actual_row['wind_speed_10m']} km/h"
+            )
+
+        with col4:
+            st.metric(
+                "Wind Direction",
+                f"{latest_actual_row['wind_direction_10m']}°"
+            )
+
+
+        # Second row
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric(
+                "Pressure",
+                f"{latest_actual_row['surface_pressure']} hPa"
+            )
+
+        with col2:
+            st.metric(
+                "Precipitation",
+                f"{latest_actual_row['precipitation']} mm"
+            )
+
+        with col3:
+            st.metric(
+                "Cloud Cover",
+                f"{latest_actual_row['cloud_cover']} %"
+            )
+
+    st.markdown("---")
     # ------------------------------------------------------------------
     # AQI DYNAMIC ALERT BANNER
     # ------------------------------------------------------------------
