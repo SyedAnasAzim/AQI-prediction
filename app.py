@@ -122,43 +122,8 @@ def us_aqi_gauge(aqi):
     return fig
 
 
-def aqi_category(aqi):
-    if aqi <= 50:
-        return "Good"
-    elif aqi <= 100:
-        return "Moderate"
-    elif aqi <= 150:
-        return "Unhealthy for Sensitive Groups"
-    elif aqi <= 200:
-        return "Unhealthy"
-    elif aqi <= 300:
-        return "Very Unhealthy"
-    else:
-        return "Hazardous"
-
-# --- HOPSWORKS CONNECTION (Cached for speed with Retries) ---
-@st.cache_resource(show_spinner="Connecting to Hopsworks Feature Store...")
-def get_hopsworks_project():
-    api_key = st.secrets["HOPSWORKS_API_KEY"]
-    if not api_key:
-        st.error("`HOPSWORKS_API_KEY` environment variable not found!")
-        st.stop()
-
-    def _login():
-        return hopsworks.login(
-            project="PearlsAQI_Project",
-            host="eu-west.cloud.hopsworks.ai",
-            port=443,
-            api_key_value=api_key,
-        )
-
-    return retry(_login, retries=3, delay=5, label="Hopsworks Login")
-
-
 @st.cache_data(ttl=300, show_spinner="Fetching latest predictions & actuals...")
 def load_data():
-    # project = get_hopsworks_project()
-    # fs = retry(lambda: project.get_feature_store(), retries=2, label="Get Feature Store")
 
     # 1. Fetch Predictions from Local Repository CSV
     csv_file = "predictions_log.csv"
@@ -172,20 +137,11 @@ def load_data():
         ])
 
     # 2. Fetch Latest SHAP Values from Hopsworks with Retry
-    # def _read_shap():
-    #     fg = fs.get_feature_group(name="aqi_shap_values", version=1)
-    #     return fg.read()
-
-    # df_shap = retry(_read_shap, retries=3, delay=10, label="Read SHAP Feature Group")
     df_shap = pd.read_csv(f"{DATA_FOLDER}/aqi_shap_values.csv")
 
     # 3. Fetch Raw/Actual AQI Data for Karachi from Hopsworks with Retry
-    # def _read_actuals():
-    #     fg = fs.get_feature_group(name="karachi_aqi", version=1)
-    #     return fg.filter(fg.timestamp >= datetime.now() - timedelta(days=5)).read()
-
-    # df_actuals = retry(_read_actuals, retries=3, delay=10, label="Read Actuals Feature Group")
     df_actuals = pd.read_csv(f"{DATA_FOLDER}/{DATA_6D_FILE_NAME}.csv")
+
     return df_preds, df_shap, df_actuals
 
 
@@ -500,7 +456,10 @@ def main():
     
             st.plotly_chart(
                 fig_shap,
-                use_container_width=True
+                use_container_width=True,
+                config = {
+                    "displayModeBar": False
+                }
             )
     
         else:
