@@ -474,7 +474,13 @@ def main():
         Regression, Random Forest, and a small neural network — are retrained daily,
         and the best-performing model for each horizon is used automatically.
         """)
-
+        
+    st.markdown("---")
+    with st.expander("Model performance"):
+        latest_metrics = latest_preds[["horizon", "model_used", "model_version", "model_r2", "model_mae", "model_rmse"]].copy()
+        latest_metrics["horizon"] = latest_metrics["horizon"].map(lambda h: HORIZON_LABELS.get(h, h))
+        latest_metrics.columns = ["Horizon", "Model", "Version", "R²", "MAE", "RMSE"]
+        st.dataframe(latest_metrics.set_index("Horizon"), use_container_width=True)
 
 if __name__ == "__main__":
     main()
