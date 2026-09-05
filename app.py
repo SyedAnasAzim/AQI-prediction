@@ -431,7 +431,6 @@ def main():
 
     with col_shap:
         st.markdown("### What's Driving This (SHAP)")
-        st.caption("SHAP values show how much each factor pushed this prediction up or down.")
         selected_horizon = st.selectbox(
             "Horizon", horizons, format_func=lambda h: HORIZON_LABELS.get(h, h)
         )
@@ -466,6 +465,7 @@ def main():
             st.plotly_chart(fig_shap, use_container_width=True, config={"displayModeBar": False})
         else:
             st.caption("No driver data logged for this horizon yet.")
+        st.caption("SHAP values show how much each factor pushed this prediction up or down.")
 
     st.markdown("---")
     with st.expander("About this forecast"):
