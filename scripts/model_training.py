@@ -1,4 +1,5 @@
 import os
+import time
 import joblib
 import numpy as np
 import pandas as pd
@@ -265,7 +266,7 @@ def save_shap_background_sample(fs, df, tree_cols, linear_cols):
 # ----------------------------------------------------------------------
 def main():
     print("Fetching raw data from Hopsworks...")
-    project, raw_df, fg = fetch_raw_data()
+    # project, raw_df, fg = fetch_raw_data()
     project, raw_df, fg = retry(fetch_raw_data, retries=3, delay=10, backoff=2, label="Login+fg")
     print("Saving 6 days of data for inference...")
     saving_data_for_inference(raw_df)
