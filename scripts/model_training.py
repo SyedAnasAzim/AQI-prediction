@@ -1,5 +1,4 @@
 import os
-import time
 import joblib
 import numpy as np
 import pandas as pd
@@ -12,6 +11,7 @@ from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from scripts.update_data import retry
 
 
 import tensorflow as tf
@@ -56,22 +56,7 @@ SHAP_RANDOM_STATE = 42
 def rmse(y_true, y_pred):
     return mean_squared_error(y_true, y_pred) ** 0.5
 
-def retry(fn, *, retries=3, delay=10, backoff=2, label="operation"):
-    """Retry fn() on exception, waiting `delay` seconds and increasing by `backoff` each time."""
-    last_exc = None
-    current_delay = delay
-    for attempt in range(1, retries + 1):
-        try:
-            return fn()
-        except Exception as e:
-            last_exc = e
-            print(f"[{label}] attempt {attempt}/{retries} failed: {e}")
-            if attempt < retries:
-                print(f"[{label}] retrying in {current_delay}s...")
-                time.sleep(current_delay)
-                current_delay *= backoff
-    raise last_exc
-    
+
 # ----------------------------------------------------------------------
 # 1. Fetch raw data from Hopsworks
 # ----------------------------------------------------------------------
@@ -266,7 +251,7 @@ def save_shap_background_sample(fs, df, tree_cols, linear_cols):
 # ----------------------------------------------------------------------
 def main():
     print("Fetching raw data from Hopsworks...")
-    # project, raw_df, fg = fetch_raw_data()
+    project, raw_df, fg = fetch_raw_data()
     project, raw_df, fg = retry(fetch_raw_data, retries=3, delay=10, backoff=2, label="Login+fg")
     print("Saving 6 days of data for inference...")
     saving_data_for_inference(raw_df)
@@ -400,7 +385,7 @@ def main():
                     )
                 )
 
-            registered.save(model_dir)
+            retry(lambda: registered.save(model_dir), retries=3, delay=15, backoff=2, label=f"Saving {algo}_{horizon}")
             print(f"Registered: aqi_{algo}_{horizon.replace('+', '_')}{tag}")
 
     print("\nDaily training complete.")
