@@ -2,6 +2,7 @@ import os
 import time
 import shutil
 import joblib
+import tempfile
 import numpy as np
 import pandas as pd
 import hopsworks
@@ -27,7 +28,6 @@ from feature_engineering import (
 # Config
 # ----------------------------------------------------------------------
 
-RAW_WINDOW_HOURS = 200
 ALGOS = ["ridge", "rf", "nn"]
 
 SHAP_VALUES_FG_NAME = "aqi_shap_values"
@@ -38,6 +38,9 @@ SHAP_BACKGROUND_FG_VERSION = 1
 
 MODEL_DOWNLOAD_ROOT = "downloaded_models"
 PREDICTIONS_CSV_PATH = "predictions_log.csv"
+
+DATA_FOLDER = "data"
+DATA_6D_FILE_NAME = "hourly_data_6d"
 
 
 # ----------------------------------------------------------------------
@@ -78,58 +81,59 @@ def connect():
             port=443,
             api_key_value=api_key,
         )
-        fs = project.get_feature_store()
+        # fs = project.get_feature_store()
         mr = project.get_model_registry()
-        return project, fs, mr
+        return project, mr
 
     return retry(_login, retries=3, delay=10, backoff=2, label="Hopsworks login")
 
 
-def read_fg_with_full_retry(get_fg_fn, max_full_retries=3, read_retries=2, label="feature group read"):
-    """
-    Fully reconnects (fresh login + fresh feature group handle) on each
-    outer attempt, not just re-reading on a possibly-stale connection.
-    get_fg_fn: function taking `fs` and returning the feature group object.
-    """
-    for full_attempt in range(1, max_full_retries + 1):
-        try:
-            project, fs, mr = retry(connect, retries=2, delay=10, backoff=2, label="login (full retry)")
-            fg = get_fg_fn(fs)
+# def read_fg_with_full_retry(get_fg_fn, max_full_retries=3, read_retries=2, label="feature group read"):
+#     """
+#     Fully reconnects (fresh login + fresh feature group handle) on each
+#     outer attempt, not just re-reading on a possibly-stale connection.
+#     get_fg_fn: function taking `fs` and returning the feature group object.
+#     """
+#     for full_attempt in range(1, max_full_retries + 1):
+#         try:
+#             project, fs, mr = retry(connect, retries=2, delay=10, backoff=2, label="login (full retry)")
+#             fg = get_fg_fn(fs)
 
-            df = retry(
-                lambda: fg.read(),
-                retries=read_retries, delay=15, backoff=2,
-                label=f"{label} (fg.read)",
-            )
+#             df = retry(
+#                 lambda: fg.read(),
+#                 retries=read_retries, delay=15, backoff=2,
+#                 label=f"{label} (fg.read)",
+#             )
 
-            print(f"[{label}] succeeded on full attempt {full_attempt}/{max_full_retries}")
-            return df, fg, fs, mr, project
+#             print(f"[{label}] succeeded on full attempt {full_attempt}/{max_full_retries}")
+#             return df, fg, fs, mr, project
 
-        except Exception as e:
-            print(f"[{label}] full attempt {full_attempt}/{max_full_retries} failed end-to-end: {e}")
-            if full_attempt < max_full_retries:
-                time.sleep(20)
+#         except Exception as e:
+#             print(f"[{label}] full attempt {full_attempt}/{max_full_retries} failed end-to-end: {e}")
+#             if full_attempt < max_full_retries:
+#                 time.sleep(20)
 
-    raise RuntimeError(f"[{label}] all retries exhausted — login+read failed repeatedly")
+#     raise RuntimeError(f"[{label}] all retries exhausted — login+read failed repeatedly")
 
 
 # ----------------------------------------------------------------------
 # 1. Raw data
 # ----------------------------------------------------------------------
 
-def fetch_raw_window(window_hours=RAW_WINDOW_HOURS):
-    raw_df, fg, fs, mr, project = read_fg_with_full_retry(
-        get_fg_fn=lambda fs: fs.get_feature_group(name="karachi_aqi", version=1),
-        max_full_retries=3,
-        read_retries=2,
-        label="Reading karachi_aqi",
-    )
+def fetch_raw_window():
+    # raw_df, fg, fs, mr, project = read_fg_with_full_retry(
+    #     get_fg_fn=lambda fs: fs.get_feature_group(name="karachi_aqi", version=1),
+    #     max_full_retries=3,
+    #     read_retries=2,
+    #     label="Reading karachi_aqi",
+    # )
 
-    raw_df["timestamp"] = pd.to_datetime(raw_df["timestamp"])
-    cutoff = raw_df["timestamp"].max() - pd.Timedelta(hours=window_hours)
-    raw_df = raw_df[raw_df["timestamp"] >= cutoff].reset_index(drop=True)
-
-    return raw_df, fg, fs, mr, project
+    # raw_df["timestamp"] = pd.to_datetime(raw_df["timestamp"])
+    # cutoff = raw_df["timestamp"].max() - pd.Timedelta(hours=window_hours)
+    # raw_df = raw_df[raw_df["timestamp"] >= cutoff].reset_index(drop=True)
+    raw_df = pd.read_csv(f"{DATA_FOLDER}/{DATA_6D_FILE_NAME}.csv")
+    project, mr = retry(connect, retries=2, delay=10, backoff=2, label="login (full retry)+mr")
+    return raw_df, project, mr
 
 
 # ----------------------------------------------------------------------
@@ -236,15 +240,16 @@ def predict_one(model, algo, X):
 # 4. SHAP
 # ----------------------------------------------------------------------
 
-def load_shap_background(fs):
-    background_df, fg, fs2, mr, project = read_fg_with_full_retry(
-        get_fg_fn=lambda fs: fs.get_feature_group(
-            name=SHAP_BACKGROUND_FG_NAME, version=SHAP_BACKGROUND_FG_VERSION
-        ),
-        max_full_retries=3,
-        read_retries=2,
-        label="Reading SHAP background",
-    )
+def load_shap_background():
+    # background_df, fg, fs2, mr, project = read_fg_with_full_retry(
+    #     get_fg_fn=lambda fs: fs.get_feature_group(
+    #         name=SHAP_BACKGROUND_FG_NAME, version=SHAP_BACKGROUND_FG_VERSION
+    #     ),
+    #     max_full_retries=3,
+    #     read_retries=2,
+    #     label="Reading SHAP background",
+    # )
+    background_df = pd.read_csv(f"{DATA_FOLDER}/{SHAP_BACKGROUND_FG_NAME}.csv")
     return background_df
 
 
@@ -292,10 +297,21 @@ def log_prediction_csv(prediction_made_at, target_timestamp, horizon,
         "actual_aqi": np.nan,
     }])
 
-    if os.path.exists(PREDICTIONS_CSV_PATH):
-        row.to_csv(PREDICTIONS_CSV_PATH, mode="a", header=False, index=False)
-    else:
-        row.to_csv(PREDICTIONS_CSV_PATH, mode="w", header=True, index=False)
+    dir_name = os.path.dirname(os.path.abspath(PREDICTIONS_CSV_PATH)) or "."
+    fd, tmp_path = tempfile.mkstemp(suffix=".csv.tmp", dir=dir_name)
+    try:
+        os.close(fd)
+        if os.path.exists(PREDICTIONS_CSV_PATH):
+            existing = pd.read_csv(PREDICTIONS_CSV_PATH)
+            combined = pd.concat([existing, row], ignore_index=True)
+        else:
+            combined = row
+        combined.to_csv(tmp_path, index=False)
+        os.replace(tmp_path, PREDICTIONS_CSV_PATH)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
 
     print(f"Logged prediction for {horizon} @ {target_timestamp} -> {PREDICTIONS_CSV_PATH}")
 
@@ -326,40 +342,38 @@ def backfill_actuals_csv(raw_df):
         return
 
     log.loc[mask, "actual_aqi"] = latest_actual_value
-    log.to_csv(PREDICTIONS_CSV_PATH, index=False)
+
+    dir_name = os.path.dirname(os.path.abspath(PREDICTIONS_CSV_PATH)) or "."
+    fd, tmp_path = tempfile.mkstemp(suffix=".csv.tmp", dir=dir_name)
+    try:
+        os.close(fd)
+        log.to_csv(tmp_path, index=False)
+        os.replace(tmp_path, PREDICTIONS_CSV_PATH)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
 
     print(f"Backfilled actual_aqi={latest_actual_value} for {mask.sum()} row(s) at {latest_actual_ts}.")
-
 
 # ----------------------------------------------------------------------
 # 5b. SHAP values log — stays in Hopsworks (not requested to move)
 # ----------------------------------------------------------------------
 
-def log_shap_values(fs, target_timestamp, horizon, shap_dict):
-    fg = fs.get_or_create_feature_group(
-        name=SHAP_VALUES_FG_NAME,
-        version=SHAP_VALUES_FG_VERSION,
-        description="Per-feature SHAP values for each hourly prediction.",
-        primary_key=["target_timestamp", "horizon", "feature_name"],
-        event_time="target_timestamp",
-        online_enabled=True,
-    )
+def log_shap_values(rows):
+    rows_df = pd.DataFrame(rows)
+    final_path = f"{DATA_FOLDER}/aqi_shap_values.csv"
+    dir_name = os.path.dirname(os.path.abspath(final_path)) or "."
 
-    rows = pd.DataFrame([
-        {
-            "target_timestamp": target_timestamp,
-            "horizon": horizon,
-            "feature_name": feat,
-            "shap_value": float(val),
-        }
-        for feat, val in shap_dict.items()
-    ])
-
-    retry(
-        lambda: fg.insert(rows, write_options={"wait_for_job": True}),
-        retries=3, delay=10, backoff=2,
-        label=f"Inserting SHAP values for {horizon}",
-    )
+    fd, tmp_path = tempfile.mkstemp(suffix=".csv.tmp", dir=dir_name)
+    try:
+        os.close(fd)
+        rows_df.to_csv(tmp_path, index=False)
+        os.replace(tmp_path, final_path)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
 
 
 # ----------------------------------------------------------------------
@@ -367,8 +381,10 @@ def log_shap_values(fs, target_timestamp, horizon, shap_dict):
 # ----------------------------------------------------------------------
 
 def main():
+    shap_rows_this_run = []
+
     print("Fetching raw window...")
-    raw_df, raw_fg, fs, mr, project = fetch_raw_window()
+    raw_df, project, mr = fetch_raw_window()
 
     print("Building current feature row...")
     row, tree_cols, linear_cols = build_current_feature_row(raw_df)
@@ -379,7 +395,7 @@ def main():
     print(f"Feature row timestamp (local Asia/Karachi): {current_ts}")
 
     print("Loading SHAP background...")
-    background_df = load_shap_background(fs)
+    background_df = load_shap_background()
 
     for horizon in HORIZONS:
         print(f"\n=== {horizon} ===")
@@ -404,7 +420,16 @@ def main():
         shap_dict = compute_shap_for_prediction(
             best_algo, model, X, background_df, tree_cols, linear_cols, scaler,
         )
-        log_shap_values(fs, target_timestamp, horizon, shap_dict)
+        shap_rows_this_run.extend([
+            {
+                "target_timestamp": target_timestamp,
+                "horizon": horizon,
+                "feature_name": feat,
+                "shap_value": float(val),
+            }
+            for feat, val in shap_dict.items()
+        ])
+    log_shap_values(shap_rows_this_run)
 
     print("\nBackfilling actuals for the most recently completed hour...")
     backfill_actuals_csv(raw_df)
