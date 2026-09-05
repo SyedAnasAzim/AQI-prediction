@@ -16,9 +16,9 @@ HORIZON_LABELS = {
     "aqi_t+72h": "Next 72 Hours",
 }
 HORIZON_COLORS = {
-    "aqi_t+24h": "#5b82d6",
-    "aqi_t+48h": "#3459b8",
-    "aqi_t+72h": "#1f3d99",
+    "aqi_t+24h": "#6950f8",
+    "aqi_t+48h": "#cadd5b",
+    "aqi_t+72h": "#51cf5b",
 }
 
 st.set_page_config(
@@ -337,7 +337,7 @@ def main():
         """, unsafe_allow_html=True)
 
     with right:
-        st.markdown("##### Pollutants")
+        st.markdown("### Pollutants")
         with st.container(border=True):
             c1, c2 = st.columns(2)
             c1.metric("PM2.5", f"{latest_actual_row['pm2_5']} µg/m³")
@@ -355,7 +355,7 @@ def main():
 
     st.markdown("---")
 
-    st.markdown("##### Weather")
+    st.markdown("### Weather")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Temperature", f"{latest_actual_row['temperature_2m']} °C")
     c2.metric("Humidity", f"{latest_actual_row['relative_humidity_2m']}%")
@@ -372,7 +372,7 @@ def main():
     # ------------------------------------------------------------------
     # Forecast cards
     # ------------------------------------------------------------------
-    st.markdown("### Forecast")
+    st.markdown("### Next 3 Days Forecast")
 
     horizons = sorted(latest_preds["horizon"].unique())
     cols = st.columns(len(horizons) if horizons else 1)
