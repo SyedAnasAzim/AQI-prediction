@@ -205,7 +205,7 @@ def us_aqi_gauge(aqi):
                 "tickvals": [0, 50, 100, 150, 200, 300, 500],
                 "tickfont": {"size": 10, "color": "#a8a8a8"},
             },
-            "bar": {"color": color, "thickness": 0.22},
+            "bar": {"color": darken_color(color), "thickness": 0.22},
             "threshold": {"line": {"color": "#ffffff", "width": 3}, "thickness": 0.88, "value": aqi},
             "steps": [
                 {"range": [0, 50], "color": "#2e7d32"},
