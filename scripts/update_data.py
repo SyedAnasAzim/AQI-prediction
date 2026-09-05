@@ -4,6 +4,7 @@ import requests
 import numpy as np
 import pandas as pd
 import json
+import tempfile
 from datetime import date, timedelta, datetime
 import hopsworks
 from dotenv import load_dotenv
@@ -55,7 +56,24 @@ def retry(fn, *, retries=3, delay=10, backoff=2, label="operation"):
     raise last_exc
 
 def saving_row_to_log(row):
-    row.to_csv(f"{DATA_FOLDER}/{DATA_6D_FILE_NAME}.csv",mode="a",header=False,index=False)
+    final_path = f"{DATA_FOLDER}/{DATA_6D_FILE_NAME}.csv"
+    dir_name = os.path.dirname(os.path.abspath(final_path)) or "."
+
+    fd, tmp_path = tempfile.mkstemp(suffix=".csv.tmp", dir=dir_name)
+    try:
+        os.close(fd)
+        if os.path.exists(final_path):
+            existing = pd.read_csv(final_path, parse_dates=["timestamp"])
+            combined = pd.concat([existing, row], ignore_index=True)
+        else:
+            combined = row 
+        combined.to_csv(tmp_path, index=False)
+        os.replace(tmp_path, final_path)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
+
 
 resp_aqi = retry(lambda: requests.get(AIR_QUALITY_URL, params=params_aqi, timeout=30), retries=3, delay=10, backoff=2, label="AQI_data")
 resp_weather = retry(lambda: requests.get(WEATHER_URL, params=params_weather, timeout=30), retries=3, delay=10, backoff=2, label="Weather_data")
@@ -113,5 +131,5 @@ def insert_with_full_retry(df, max_full_retries=3, insert_retries=2):
 
 
 insert_with_full_retry(df_merged)
-
+saving_row_to_log(df_merged)
 print("New row has been added")
