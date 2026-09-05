@@ -4,7 +4,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import hopsworks
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
@@ -239,14 +238,78 @@ def main():
 
     latest_actual_row = df_actuals.iloc[df_actuals["timestamp"].idxmax()]
     latest_actual_aqi = latest_actual_row["us_aqi"]
-        
-    st.plotly_chart(
-        us_aqi_gauge(latest_actual_aqi),
-        use_container_width=True,
-        config = {
-            "displayModeBar": False
-        }
-    )
+    left, right = st.columns([1, 2])
+    with left:
+        st.plotly_chart(
+            us_aqi_gauge(latest_actual_aqi),
+            use_container_width=True,
+            config = {
+                "displayModeBar": False
+            }
+        )
+
+        st.markdown(
+            f"<h4 style='text-align:center;'>{get_aqi_status(latest_actual_aqi)[0]}</h4>",
+            unsafe_allow_html=True
+        )
+
+
+    # -------------------------
+    # POLLUTANTS
+    # -------------------------
+
+    with right:
+
+        st.subheader("Pollutants")
+
+        with st.container(border=True):
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.metric(
+                    "PM₂.₅",
+                    f"{latest_actual_row['pm2_5']} µg/m³"
+                )
+
+            with col2:
+                st.metric(
+                    "PM₁₀",
+                    f"{latest_actual_row['pm10']} µg/m³"
+                )
+
+            with col3:
+                st.metric(
+                    "CO",
+                    f"{latest_actual_row['carbon_monoxide']} µg/m³"
+                )
+
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.metric(
+                    "NO₂",
+                    f"{latest_actual_row['nitrogen_dioxide']} µg/m³"
+                )
+
+            with col2:
+                st.metric(
+                    "SO₂",
+                    f"{latest_actual_row['sulphur_dioxide']} µg/m³"
+                )
+
+            with col3:
+                st.metric(
+                    "O₃",
+                    f"{latest_actual_row['ozone']} µg/m³"
+                )
+
+
+            st.metric(
+                "Dust",
+                f"{latest_actual_row['dust']} µg/m³"
+            )
 
     st.markdown("---")
 
