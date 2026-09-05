@@ -16,9 +16,9 @@ HORIZON_LABELS = {
     "aqi_t+72h": "Next 72 Hours",
 }
 HORIZON_COLORS = {
-    "aqi_t+24h": "#3E48CA",
-    "aqi_t+48h": "#D35656",
-    "aqi_t+72h": "#a11f1f",
+    "aqi_t+24h": "#C50A0A",
+    "aqi_t+48h": "#E6D600",
+    "aqi_t+72h": "#00c3ff",
 }
 
 st.set_page_config(
