@@ -141,19 +141,23 @@ def us_aqi_gauge(aqi):
         mode="gauge+number",
         value=aqi,
         number={"font": {"size": 72, "color": color, "family": "Inter"}},
-        title={"text": "US AQI", "font": {"size": 15, "family": "Inter", "color": "#8a8a8a"}},
+        title={"text": "US AQI", "font": {"size": 15, "family": "Inter", "color": "#9a9a9a"}},
         gauge={
             "shape": "angular",
-            "axis": {"range": [0, 500], "tickvals": [0, 50, 100, 150, 200, 300, 500], "tickfont": {"size": 9}},
+            "axis": {
+                "range": [0, 500],
+                "tickvals": [0, 50, 100, 150, 200, 300, 500],
+                "tickfont": {"size": 9, "color": "#9a9a9a"},
+            },
             "bar": {"color": active_color, "thickness": 0.20},
             "threshold": {"line": {"color": active_color, "width": 3}, "thickness": 0.85, "value": aqi},
             "steps": [
-                {"range": [0, 50], "color": "#e3efe3"},
-                {"range": [50, 100], "color": "#f2ecd6"},
-                {"range": [100, 150], "color": "#f2e0d0"},
-                {"range": [150, 200], "color": "#f0d6d6"},
-                {"range": [200, 300], "color": "#e6dbe9"},
-                {"range": [300, 500], "color": "#e0cdd0"},
+                {"range": [0, 50], "color": "#1f3d24"},
+                {"range": [50, 100], "color": "#3d3a1f"},
+                {"range": [100, 150], "color": "#3d2f1f"},
+                {"range": [150, 200], "color": "#3d1f1f"},
+                {"range": [200, 300], "color": "#332038"},
+                {"range": [300, 500], "color": "#331f24"},
             ],
             "borderwidth": 0,
         },
@@ -196,8 +200,13 @@ def load_data():
 # Main
 # ----------------------------------------------------------------------
 def main():
-    st.markdown("# Karachi Air Quality")
+    st.markdown("#Air Quality")
     st.caption("Hourly forecasts from an ensemble of Ridge, Random Forest, and Neural Network models.")
+    st.markdown(
+    '<div style="color:#8a8a8a; font-size:0.85rem; margin-top:-8px; margin-bottom:1rem;">'
+    'Karachi, Pakistan · 24.8607°N, 67.0011°E</div>',
+    unsafe_allow_html=True
+)
 
     try:
         df_preds, df_shap, df_actuals = load_data()
@@ -289,9 +298,8 @@ def main():
             st.metric("Dust", f"{latest_actual_row['dust']} µg/m³")
 
     st.markdown("---")
-
+    st.markdown("##### Weather Conditions")
     with st.container(border=True):
-        st.markdown("##### Conditions")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Temperature", f"{latest_actual_row['temperature_2m']} °C")
         c2.metric("Humidity", f"{latest_actual_row['relative_humidity_2m']}%")
@@ -303,7 +311,7 @@ def main():
         c2.metric("Precipitation", f"{latest_actual_row['precipitation']} mm")
         c3.metric("Cloud Cover", f"{latest_actual_row['cloud_cover']}%")
 
-    st.markdown("---")
+        st.markdown("---")
 
     # ------------------------------------------------------------------
     # Forecast cards
