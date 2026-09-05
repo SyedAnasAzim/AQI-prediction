@@ -121,6 +121,15 @@ def us_aqi_gauge(aqi):
                     "thickness": 0.20
                 },
 
+                "threshold": {
+                    "line": {
+                        "color": active_color,
+                        "width": 4
+                    },
+                    "thickness": 0.85,
+                    "value": aqi
+                },
+
                 # AQI ranges
                 "steps": [
                     {
