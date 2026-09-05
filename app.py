@@ -80,7 +80,7 @@ def us_aqi_gauge(aqi):
     category, color, emoji = get_aqi_status(aqi)
 
     # Slightly darker version for active bar
-    active_color = darken_color(color, 0.9)
+    active_color = darken_color(color, 0.8)
 
     fig = go.Figure(
         go.Indicator(
