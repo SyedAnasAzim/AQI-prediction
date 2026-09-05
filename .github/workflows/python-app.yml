@@ -6,6 +6,8 @@ on:
 concurrency:
   group: data-6d-writer
   cancel-in-progress: false
+permissions:
+  contents: write
     
 jobs: 
     update: 
