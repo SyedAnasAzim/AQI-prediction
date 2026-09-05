@@ -285,7 +285,7 @@ def compute_shap_for_prediction(algo, model, X, background_df, tree_cols, linear
 # ----------------------------------------------------------------------
 
 def log_prediction_csv(prediction_made_at, target_timestamp, horizon,
-                        predicted_aqi, model_used, model_version, model_obj):
+                        predicted_aqi, model_used, model_version):
     row = pd.DataFrame([{
         "prediction_made_at": prediction_made_at,
         "target_timestamp": target_timestamp,
@@ -294,9 +294,6 @@ def log_prediction_csv(prediction_made_at, target_timestamp, horizon,
         "predicted_aqi": predicted_aqi,
         "model_used": model_used,
         "model_version": model_version,
-        "model_r2": model_obj.training_metrics.get("test_r2"),
-        "model_mae": model_obj.training_metrics.get("test_mae"),
-        "model_rmse": model_obj.training_metrics.get("test_rmse"),
         "actual_aqi": np.nan,
     }])
 
@@ -416,7 +413,7 @@ def main():
 
         log_prediction_csv(
             prediction_made_at, target_timestamp, horizon,
-            predicted_aqi, best_algo, model_obj.version, model_obj
+            predicted_aqi, best_algo, model_obj.version,
         )
 
         print("Computing SHAP values...")
