@@ -10,20 +10,90 @@ from datetime import datetime, timedelta
 DATA_FOLDER = "data"
 DATA_6D_FILE_NAME = "hourly_data_6d"
 
+HORIZON_LABELS = {
+    "aqi_t+24h": "Next 24 Hours",
+    "aqi_t+48h": "Next 48 Hours",
+    "aqi_t+72h": "Next 72 Hours",
+}
+HORIZON_COLORS = {
+    "aqi_t+24h": "#c17a3d",
+    "aqi_t+48h": "#9d4f4f",
+    "aqi_t+72h": "#5a5f8a",
+}
 
-# Set page configuration
 st.set_page_config(
-    page_title="Karachi AQI Forecast Dashboard",
-    page_icon="🌫️",
+    page_title="Karachi Air Quality Forecast",
+    page_icon="〰",
     layout="wide",
 )
 
 load_dotenv()
 
 
-# --- RECOVERY & RETRY LOGIC ---
+# ----------------------------------------------------------------------
+# Styling — quiet, neutral, editorial. One accent reserved for AQI severity.
+# ----------------------------------------------------------------------
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600&family=Inter:wght@400;500;600&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
+h1, h2, h3 {
+    font-family: 'Source Serif 4', serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+.block-container {
+    padding-top: 2rem;
+    max-width: 1200px;
+}
+[data-testid="stMetricValue"] {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+}
+[data-testid="stMetricLabel"] {
+    color: #8a8a8a;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.reading-time {
+    color: #8a8a8a;
+    font-size: 0.8rem;
+    font-style: italic;
+    margin-top: -8px;
+}
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.alert-card {
+    border-left: 4px solid;
+    padding: 0.9rem 1.2rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# ----------------------------------------------------------------------
+# Retry helper
+# ----------------------------------------------------------------------
 def retry(fn, *, retries=3, delay=10, backoff=2, label="operation"):
-    """Retry fn() on exception with exponential backoff."""
     last_exc = None
     current_delay = delay
     for attempt in range(1, retries + 1):
@@ -37,557 +107,303 @@ def retry(fn, *, retries=3, delay=10, backoff=2, label="operation"):
                 current_delay *= backoff
     raise last_exc
 
-# --- AQI utility func ---
+
+# ----------------------------------------------------------------------
+# AQI category — muted-but-legible palette, no emoji
+# ----------------------------------------------------------------------
 def get_aqi_status(aqi_val):
     if aqi_val <= 50:
-        return "Good", "#00e400", "🟢"
+        return "Good", "#3f9142"
     elif aqi_val <= 100:
-        return "Moderate", "#ffff00", "🟡"
+        return "Moderate", "#c9a227"
     elif aqi_val <= 150:
-        return "Unhealthy for Sensitive Groups", "#ff7e00", "🟠"
+        return "Unhealthy for Sensitive Groups", "#c17a3d"
     elif aqi_val <= 200:
-        return "Unhealthy", "#ff0000", "🔴"
+        return "Unhealthy", "#b33f3f"
     elif aqi_val <= 300:
-        return "Very Unhealthy", "#8f3f97", "🟣"
+        return "Very Unhealthy", "#7a4a8f"
     else:
-        return "Hazardous", "#7e0023", "🟤"
+        return "Hazardous", "#6b1f2a"
 
 
-
-# --- gauge/speedometer func ---
-
-def darken_color(hex_color, factor=0.65):
-    """
-    Makes the active AQI bar slightly darker
-    than the background AQI section.
-    """
+def darken_color(hex_color, factor=0.8):
     hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    return f"#{int(r*factor):02x}{int(g*factor):02x}{int(b*factor):02x}"
 
-    r = int(hex_color[0:2], 16)
-    g = int(hex_color[2:4], 16)
-    b = int(hex_color[4:6], 16)
-
-    r = int(r * factor)
-    g = int(g * factor)
-    b = int(b * factor)
-
-    return f"#{r:02x}{g:02x}{b:02x}"
 
 def us_aqi_gauge(aqi):
-
     aqi = float(aqi)
+    category, color = get_aqi_status(aqi)
+    active_color = darken_color(color, 0.85)
 
-    category, color, emoji = get_aqi_status(aqi)
-
-    # Slightly darker version for active bar
-    active_color = darken_color(color, 0.8)
-
-    fig = go.Figure(
-        go.Indicator(
-            mode="gauge+number",
-            value=aqi,
-
-            number={
-                "font": {
-                    "size": 85,
-                    "color": color
-                }
-            },
-
-            title={
-                "text": "US AQI",
-                "font": {
-                    "size": 18
-                }
-            },
-
-            gauge={
-                "shape": "angular",
-
-                "axis": {
-                    "range": [0, 500],
-                    "tickvals": [
-                        0, 50, 100, 150,
-                        200, 300, 500
-                    ],
-                    "tickfont": {
-                        "size": 10
-                    }
-                },
-
-                # Active portion
-                "bar": {
-                    "color": active_color,
-                    "thickness": 0.20
-                },
-
-                "threshold": {
-                    "line": {
-                        "color": active_color,
-                        "width": 4
-                    },
-                    "thickness": 0.85,
-                    "value": aqi
-                },
-
-                # AQI ranges
-                "steps": [
-                    {
-                        "range": [0, 50],
-                        "color": "#00e400"
-                    },
-                    {
-                        "range": [50, 100],
-                        "color": "#ffff00"
-                    },
-                    {
-                        "range": [100, 150],
-                        "color": "#ff7e00"
-                    },
-                    {
-                        "range": [150, 200],
-                        "color": "#ff0000"
-                    },
-                    {
-                        "range": [200, 300],
-                        "color": "#8f3f97"
-                    },
-                    {
-                        "range": [300, 500],
-                        "color": "#7e0023"
-                    }
-                ],
-
-                "borderwidth": 0
-            },
-
-            domain={
-                "x": [0, 1],
-                "y": [0.20, 1]
-            }
-        )
-    )
-
-    fig.update_layout(
-        height=320,
-
-        margin=dict(
-            l=10,
-            r=10,
-            t=20,
-            b=0
-        ),
-
-        paper_bgcolor="rgba(0,0,0,0)"
-    )
-
-    return fig, category, color, emoji
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=aqi,
+        number={"font": {"size": 72, "color": color, "family": "Inter"}},
+        title={"text": "US AQI", "font": {"size": 15, "family": "Inter", "color": "#8a8a8a"}},
+        gauge={
+            "shape": "angular",
+            "axis": {"range": [0, 500], "tickvals": [0, 50, 100, 150, 200, 300, 500], "tickfont": {"size": 9}},
+            "bar": {"color": active_color, "thickness": 0.20},
+            "threshold": {"line": {"color": active_color, "width": 3}, "thickness": 0.85, "value": aqi},
+            "steps": [
+                {"range": [0, 50], "color": "#e3efe3"},
+                {"range": [50, 100], "color": "#f2ecd6"},
+                {"range": [100, 150], "color": "#f2e0d0"},
+                {"range": [150, 200], "color": "#f0d6d6"},
+                {"range": [200, 300], "color": "#e6dbe9"},
+                {"range": [300, 500], "color": "#e0cdd0"},
+            ],
+            "borderwidth": 0,
+        },
+        domain={"x": [0, 1], "y": [0.15, 1]},
+    ))
+    fig.update_layout(height=300, margin=dict(l=10, r=10, t=20, b=0), paper_bgcolor="rgba(0,0,0,0)")
+    return fig, category, color
 
 
-@st.cache_data(ttl=300, show_spinner="Fetching latest predictions & actuals...")
+# ----------------------------------------------------------------------
+# Data loading
+# ----------------------------------------------------------------------
+@st.cache_data(ttl=300, show_spinner="Fetching latest forecast data...")
 def load_data():
-
-    # 1. Fetch Predictions from Local Repository CSV
     csv_file = "predictions_log.csv"
-
     if os.path.exists(csv_file):
         df_preds = pd.read_csv(csv_file)
     else:
         df_preds = pd.DataFrame(columns=[
-            "prediction_made_at", "target_timestamp", "horizon", 
+            "prediction_made_at", "target_timestamp", "horizon",
             "predicted_aqi", "model_used", "model_version"
         ])
 
-    # 2. Fetch Latest SHAP Values from Hopsworks with Retry
-    df_shap = pd.read_csv(f"{DATA_FOLDER}/aqi_shap_values.csv")
+    shap_path = f"{DATA_FOLDER}/aqi_shap_values.csv"
+    if os.path.exists(shap_path):
+        df_shap = pd.read_csv(shap_path)
+    else:
+        df_shap = pd.DataFrame(columns=["target_timestamp", "horizon", "feature_name", "shap_value"])
 
-    # 3. Fetch Raw/Actual AQI Data for Karachi from Hopsworks with Retry
-    df_actuals = pd.read_csv(f"{DATA_FOLDER}/{DATA_6D_FILE_NAME}.csv")
+    actuals_path = f"{DATA_FOLDER}/{DATA_6D_FILE_NAME}.csv"
+    if os.path.exists(actuals_path):
+        df_actuals = pd.read_csv(actuals_path)
+    else:
+        df_actuals = pd.DataFrame(columns=["timestamp", "us_aqi"])
 
     return df_preds, df_shap, df_actuals
 
 
-# --- MAIN APP LAYOUT ---
+# ----------------------------------------------------------------------
+# Main
+# ----------------------------------------------------------------------
 def main():
-    st.title("🌫️ Karachi Air Quality Index (AQI) Forecast")
-    st.caption("Live hourly machine learning forecasts powered by Hopsworks, Open-Meteo API, Ridge, Random Forest, and Neural Networks.")
+    st.markdown("# Karachi Air Quality")
+    st.caption("Hourly forecasts from an ensemble of Ridge, Random Forest, and Neural Network models.")
 
     try:
         df_preds, df_shap, df_actuals = load_data()
     except Exception as e:
-        st.error(f"Failed to load data from Hopsworks or CSV log: {e}")
+        st.error(f"Couldn't load forecast data: {e}")
         return
 
     if df_preds.empty:
-        st.warning("No predictions found in local CSV log. Please ensure `inference.py` has run.")
+        st.info("No forecasts logged yet — check back once the hourly pipeline has run.")
         return
-    
 
+    df_preds["target_timestamp"] = pd.to_datetime(df_preds["target_timestamp"], format="mixed", errors="coerce")
+    df_preds["prediction_made_at"] = pd.to_datetime(df_preds["prediction_made_at"], format="mixed", errors="coerce")
+    df_actuals["timestamp"] = pd.to_datetime(df_actuals["timestamp"], format="mixed", errors="coerce")
 
-
-    # Clean & sort dataframes
-    df_preds["target_timestamp"] = pd.to_datetime(df_preds["target_timestamp"],format="mixed",errors="coerce")
-    df_preds["prediction_made_at"] = pd.to_datetime(df_preds["prediction_made_at"],format="mixed",errors="coerce")
-    df_actuals["timestamp"] = pd.to_datetime(df_actuals["timestamp"],format="mixed",errors="coerce")
-
-    # Extract latest predictions
     latest_run_time = df_preds["prediction_made_at"].max()
     latest_preds = df_preds[df_preds["prediction_made_at"] == latest_run_time]
-    # ------------------------------------------------------------------
-    # Indicator for AQI
-    # ------------------------------------------------------------------
-    st.markdown("---")
 
     latest_actual_row = df_actuals.iloc[df_actuals["timestamp"].idxmax()]
     latest_actual_aqi = latest_actual_row["us_aqi"]
-    left, right = st.columns([1, 2])
-    with left:
-        fig, category, color, emoji = us_aqi_gauge(latest_actual_aqi)
+    latest_actual_time = latest_actual_row["timestamp"].strftime("%b %d, %H:%M")
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-            config={
-                "displayModeBar": False
-            }
-        )
-
-        st.markdown(
-            f"""
-            <div style="
-                text-align: center;
-                color: {color};
-                font-size: 24px;
-                font-weight: 700;
-                margin-top: -55px;
-            ">
-                {category}
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-
-    # -------------------------
-    # POLLUTANTS
-    # -------------------------
-
-    with right:
-
-        st.subheader("Pollutants")
-
-        with st.container(border=True):
-
-            col1, col2, col3 = st.columns(3)
-
-            with col1:
-                st.metric(
-                    "PM₂.₅",
-                    f"{latest_actual_row['pm2_5']} µg/m³"
-                )
-
-            with col2:
-                st.metric(
-                    "PM₁₀",
-                    f"{latest_actual_row['pm10']} µg/m³"
-                )
-
-            with col3:
-                st.metric(
-                    "CO",
-                    f"{latest_actual_row['carbon_monoxide']} µg/m³"
-                )
-
-
-            col1, col2, col3 = st.columns(3)
-
-            with col1:
-                st.metric(
-                    "NO₂",
-                    f"{latest_actual_row['nitrogen_dioxide']} µg/m³"
-                )
-
-            with col2:
-                st.metric(
-                    "SO₂",
-                    f"{latest_actual_row['sulphur_dioxide']} µg/m³"
-                )
-
-            with col3:
-                st.metric(
-                    "O₃",
-                    f"{latest_actual_row['ozone']} µg/m³"
-                )
-
-
-            st.metric(
-                "Dust",
-                f"{latest_actual_row['dust']} µg/m³"
-            )
-
-    st.markdown("---")
-    with st.container(border=True):
-
-        # First row
-        col1, col2, col3, col4 = st.columns(4)
-
-        with col1:
-            st.metric(
-                "Temperature",
-                f"{latest_actual_row['temperature_2m']} °C"
-            )
-
-        with col2:
-            st.metric(
-                "Humidity",
-                f"{latest_actual_row['relative_humidity_2m']} %"
-            )
-
-        with col3:
-            st.metric(
-                "Wind Speed",
-                f"{latest_actual_row['wind_speed_10m']} km/h"
-            )
-
-        with col4:
-            st.metric(
-                "Wind Direction",
-                f"{latest_actual_row['wind_direction_10m']}°"
-            )
-
-
-        # Second row
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            st.metric(
-                "Pressure",
-                f"{latest_actual_row['surface_pressure']} hPa"
-            )
-
-        with col2:
-            st.metric(
-                "Precipitation",
-                f"{latest_actual_row['precipitation']} mm"
-            )
-
-        with col3:
-            st.metric(
-                "Cloud Cover",
-                f"{latest_actual_row['cloud_cover']} %"
-            )
-
-    st.markdown("---")
     # ------------------------------------------------------------------
-    # AQI DYNAMIC ALERT BANNER
+    # Alert — only surfaced with real weight when conditions warrant it.
+    # A calm day gets a quiet line, not a banner.
     # ------------------------------------------------------------------
     max_predicted_aqi = latest_preds["predicted_aqi"].max()
     peak_row = latest_preds[latest_preds["predicted_aqi"] == max_predicted_aqi].iloc[0]
-    peak_horizon = peak_row["horizon"].upper()
-    peak_time = peak_row["target_timestamp"].strftime("%Y-%m-%d %H:%M")
+    peak_label = HORIZON_LABELS.get(peak_row["horizon"], peak_row["horizon"])
+    peak_time = peak_row["target_timestamp"].strftime("%b %d, %H:%M")
 
     if max_predicted_aqi > 200:
-        st.error(
-            f"🚨 **SEVERE AQI ALERT:** Peak predicted AQI reaches **{round(max_predicted_aqi, 1)}** "
-            f"(Very Unhealthy/Hazardous) for the **{peak_horizon}** forecast ({peak_time}). "
-            f"Avoid outdoor activities and wear an N95 mask!"
-        )
+        st.markdown(f"""
+        <div class="alert-card" style="border-color:#6b1f2a; background:#fbf0f1;">
+            <strong>Severe air quality expected.</strong> The forecast peaks at
+            {round(max_predicted_aqi, 1)} AQI ({peak_label}, around {peak_time}).
+            Avoid outdoor activity where possible and consider a mask outdoors.
+        </div>
+        """, unsafe_allow_html=True)
     elif max_predicted_aqi > 150:
-        st.warning(
-            f"⚠️ **UNHEALTHY AQI WARNING:** Peak predicted AQI is **{round(max_predicted_aqi, 1)}** "
-            f"for the **{peak_horizon}** forecast ({peak_time}). "
-            f"Sensitive groups (children, elderly, asthmatics) should stay indoors."
-        )
+        st.markdown(f"""
+        <div class="alert-card" style="border-color:#c17a3d; background:#fbf3ec;">
+            <strong>Unhealthy air quality expected.</strong> Peak forecast is
+            {round(max_predicted_aqi, 1)} AQI ({peak_label}, around {peak_time}).
+            Sensitive groups should limit time outdoors.
+        </div>
+        """, unsafe_allow_html=True)
     elif max_predicted_aqi > 100:
-        st.info(
-            f"🟡 **MODERATE TO SENSITIVE AQI ADVISORY:** Forecasted AQI peaks at **{round(max_predicted_aqi, 1)}** "
-            f"for the **{peak_horizon}** forecast. Air quality is acceptable, but sensitive individuals may feel slight discomfort."
-        )
-    else:
-        st.success(
-            f"🟢 **GOOD AIR QUALITY:** Forecasted AQI remains safe at or below **{round(max_predicted_aqi, 1)}** "
-            f"across all upcoming horizons."
-        )
+        st.markdown(f"""
+        <div class="alert-card" style="border-color:#c9a227; background:#fbf7ea;">
+            Air quality trends moderate over the coming days — peak forecast of
+            {round(max_predicted_aqi, 1)} AQI ({peak_label}).
+        </div>
+        """, unsafe_allow_html=True)
+    # No banner at all when the forecast stays good — nothing to flag.
 
     st.markdown("---")
 
     # ------------------------------------------------------------------
-    # 1. Top Section: Forecast Cards
+    # Current reading
     # ------------------------------------------------------------------
-    st.subheader("📍 Current Air Quality Forecasts for Karachi")
+    left, right = st.columns([1, 2])
+
+    with left:
+        fig, category, color = us_aqi_gauge(latest_actual_aqi)
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.markdown(f"""
+        <div style="text-align:center; margin-top:-50px;">
+            <span class="status-badge" style="color:{color};">
+                <span class="status-dot" style="background:{color};"></span>{category}
+            </span>
+        </div>
+        <div style="text-align:center;" class="reading-time">as of {latest_actual_time}</div>
+        """, unsafe_allow_html=True)
+
+    with right:
+        st.markdown("##### Pollutants")
+        with st.container(border=True):
+            c1, c2, c3 = st.columns(3)
+            c1.metric("PM2.5", f"{latest_actual_row['pm2_5']} µg/m³")
+            c2.metric("PM10", f"{latest_actual_row['pm10']} µg/m³")
+            c3.metric("Carbon Monoxide", f"{latest_actual_row['carbon_monoxide']} µg/m³")
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Nitrogen Dioxide", f"{latest_actual_row['nitrogen_dioxide']} µg/m³")
+            c2.metric("Sulphur Dioxide", f"{latest_actual_row['sulphur_dioxide']} µg/m³")
+            c3.metric("Ozone", f"{latest_actual_row['ozone']} µg/m³")
+
+            st.metric("Dust", f"{latest_actual_row['dust']} µg/m³")
+
+    st.markdown("---")
+
+    with st.container(border=True):
+        st.markdown("##### Conditions")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Temperature", f"{latest_actual_row['temperature_2m']} °C")
+        c2.metric("Humidity", f"{latest_actual_row['relative_humidity_2m']}%")
+        c3.metric("Wind Speed", f"{latest_actual_row['wind_speed_10m']} km/h")
+        c4.metric("Wind Direction", f"{latest_actual_row['wind_direction_10m']}°")
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Pressure", f"{latest_actual_row['surface_pressure']} hPa")
+        c2.metric("Precipitation", f"{latest_actual_row['precipitation']} mm")
+        c3.metric("Cloud Cover", f"{latest_actual_row['cloud_cover']}%")
+
+    st.markdown("---")
+
+    # ------------------------------------------------------------------
+    # Forecast cards
+    # ------------------------------------------------------------------
+    st.markdown("### Forecast")
 
     horizons = sorted(latest_preds["horizon"].unique())
-    cols = st.columns(len(horizons) if len(horizons) > 0 else 1)
+    cols = st.columns(len(horizons) if horizons else 1)
 
     for i, horizon in enumerate(horizons):
         row = latest_preds[latest_preds["horizon"] == horizon].iloc[0]
         aqi_val = round(row["predicted_aqi"], 1)
         model_used = row["model_used"]
         model_ver = row["model_version"]
-        target_ts = row["target_timestamp"].strftime("%Y-%m-%d %H:%M")
-
-        status, color, emoji = get_aqi_status(aqi_val)
+        target_ts = row["target_timestamp"].strftime("%b %d, %H:%M")
+        label = HORIZON_LABELS.get(horizon, horizon)
+        status, color = get_aqi_status(aqi_val)
 
         with cols[i]:
-            st.metric(
-                label=f"Horizon: {horizon.upper()} ({target_ts})",
-                value=f"{aqi_val} AQI {emoji}",
-                delta=f"Model: {model_used.upper()} (v{model_ver})",
-                delta_color="off"
+            st.metric(label=f"{label} · {target_ts}", value=f"{aqi_val} AQI",
+                      delta=f"{model_used.upper()} v{model_ver}", delta_color="off")
+            st.markdown(
+                f'<span class="status-badge" style="color:{color}; font-size:0.9rem;">'
+                f'<span class="status-dot" style="background:{color}; width:8px; height:8px;"></span>{status}</span>',
+                unsafe_allow_html=True
             )
-            st.markdown(f"**Health Category:** <span style='color:{color}; font-weight:bold;'>{status}</span>", unsafe_allow_html=True)
 
     st.markdown("---")
 
     # ------------------------------------------------------------------
-    # 2. Main Visuals: Historical Actuals vs Forecast Trend
+    # Trend + SHAP
     # ------------------------------------------------------------------
     col_chart, col_shap = st.columns([6, 4])
 
     with col_chart:
-        st.subheader("📈 AQI Trend: Actual vs Forecast")
-        
+        st.markdown("### Actual vs. Forecast")
         fig = go.Figure()
-
-        # Actual AQI trace (last 6 days)
         recent_actuals = df_actuals.sort_values("timestamp").tail(144)
         fig.add_trace(go.Scatter(
-            x=recent_actuals["timestamp"],
-            y=recent_actuals["us_aqi"],
-            mode="lines",
-            name="Actual Karachi US AQI",
-            line=dict(color="#1f77b4", width=2)
+            x=recent_actuals["timestamp"], y=recent_actuals["us_aqi"],
+            mode="lines", name="Actual AQI", line=dict(color="#3a3a3a", width=2)
         ))
-
-        # Predictions trace
-        hori_color = {"aqi_t+24h":"#ff7f0e","aqi_t+48h":"#ad0707","aqi_t+72h":"#5805e8"}
         for hori, group in df_preds.groupby("horizon"):
             fig.add_trace(go.Scatter(
-                x=group["target_timestamp"],
-                y=group["predicted_aqi"].round(2),
-                mode="lines+markers",
-                name=f"Model predictionds {hori}",  
-                marker=dict(size=4, color=hori_color[hori]),
-                line=dict(color=hori_color[hori])
+                x=group["target_timestamp"], y=group["predicted_aqi"].round(2),
+                mode="lines+markers", name=HORIZON_LABELS.get(hori, hori),
+                marker=dict(size=4, color=HORIZON_COLORS.get(hori, "#888")),
+                line=dict(color=HORIZON_COLORS.get(hori, "#888"), dash="dot")
             ))
-
         fig.update_layout(
-            xaxis_title="Timestamp (Karachi Time)",
-            yaxis_title="US AQI Level",
-            hovermode="x unified",
-            margin=dict(l=0, r=0, t=30, b=0),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            xaxis_title=None, yaxis_title="US AQI",
+            hovermode="x unified", margin=dict(l=0, r=0, t=10, b=0),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # ------------------------------------------------------------------
-    # 3. SHAP Feature Drivers Section
-    # ------------------------------------------------------------------
     with col_shap:
-        st.subheader("🔍 Prediction Drivers (SHAP Values)")
-    
+        st.markdown("### What's Driving This")
         selected_horizon = st.selectbox(
-            "Select Horizon to view drivers:",
-            horizons
+            "Horizon", horizons, format_func=lambda h: HORIZON_LABELS.get(h, h)
         )
-    
-        target_ts_horizon = latest_preds[
-            latest_preds["horizon"] == selected_horizon
-        ]["target_timestamp"].iloc[0]
-    
-        # Make timestamps comparable
-        target_ts_horizon = pd.to_datetime(target_ts_horizon)
-    
-        # Filter SHAP data
+        target_ts_horizon = pd.to_datetime(
+            latest_preds[latest_preds["horizon"] == selected_horizon]["target_timestamp"].iloc[0]
+        )
         shap_row = df_shap[
             (df_shap["horizon"] == selected_horizon) &
-            (
-                pd.to_datetime(df_shap["target_timestamp"]) ==
-                target_ts_horizon
-            )
+            (pd.to_datetime(df_shap["target_timestamp"]) == target_ts_horizon)
         ].copy()
-    
+
         if not shap_row.empty:
-    
-            # --------------------------------
-            # SHAP data is already long format
-            # --------------------------------
-    
-            df_shap_plot = shap_row[
-                ["feature_name", "shap_value"]
-            ].copy()
-    
-            # Make sure SHAP values are numeric
-            df_shap_plot["shap_value"] = pd.to_numeric(
-                df_shap_plot["shap_value"],
-                errors="coerce"
-            )
-    
-            # Remove invalid values
-            df_shap_plot = df_shap_plot.dropna(
-                subset=["shap_value"]
-            )
-    
-            # Calculate absolute impact for ranking
-            df_shap_plot["abs_impact"] = (
-                df_shap_plot["shap_value"].abs()
-            )
-    
-            # Get top 8 features
-            df_shap_plot = (
-                df_shap_plot
-                .sort_values("abs_impact", ascending=False)
-                .head(8)
-            )
-    
-            # --------------------------------
-            # Plot
-            # --------------------------------
-    
+            df_shap_plot = shap_row[["feature_name", "shap_value"]].copy()
+            df_shap_plot["shap_value"] = pd.to_numeric(df_shap_plot["shap_value"], errors="coerce")
+            df_shap_plot = df_shap_plot.dropna(subset=["shap_value"])
+            df_shap_plot["abs_impact"] = df_shap_plot["shap_value"].abs()
+            df_shap_plot = df_shap_plot.sort_values("abs_impact", ascending=False).head(8)
+
             fig_shap = px.bar(
                 df_shap_plot.sort_values("shap_value"),
-                x="shap_value",
-                y="feature_name",
-                orientation="h",
-                color="shap_value",
-                color_continuous_scale="RdBu_r",
-                title=f"Top Features Influencing {selected_horizon.upper()} Forecast",
-                labels={
-                    "feature_name": "Feature",
-                    "shap_value": "SHAP Impact"
-                }
+                x="shap_value", y="feature_name", orientation="h",
+                color="shap_value", color_continuous_scale=["#b33f3f", "#e8e8e8", "#3f6b91"],
+                labels={"feature_name": "", "shap_value": "Impact on prediction"},
             )
-    
             fig_shap.update_layout(
-                yaxis=dict(autorange="reversed"),
-                margin=dict(l=0, r=0, t=50, b=0)
+                yaxis=dict(autorange="reversed"), margin=dict(l=0, r=0, t=10, b=0),
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                coloraxis_showscale=False,
             )
-    
-            st.plotly_chart(
-                fig_shap,
-                use_container_width=True,
-                config = {
-                    "displayModeBar": False
-                }
-            )
-    
+            st.plotly_chart(fig_shap, use_container_width=True, config={"displayModeBar": False})
         else:
-            st.info(
-                "No SHAP values logged for the selected horizon yet."
-            )
-    # ------------------------------------------------------------------
-    # 4. Footer & Model Information
-    # ------------------------------------------------------------------
+            st.caption("No driver data logged for this horizon yet.")
+
     st.markdown("---")
-    with st.expander("ℹ️ About the Models & Pipeline Architecture"):
+    with st.expander("About this forecast"):
         st.write("""
-        - **Location:** Karachi, Pakistan (Lat: 24.8607, Lon: 67.0011)
-        - **Data Sources:** Open-Meteo Air Quality & Weather APIs stored in **Hopsworks Feature Store**.
-        - **Models in Registry:**
-            - **Ridge Regression** (L2 Regularized Linear Model)
-            - **Random Forest Regressor** (Tree-based Ensemble)
-            - **Neural Network** (Multi-Layer Perceptron trained in TensorFlow/Keras)
-        - **Daily Retraining:** The highest performing model per forecast horizon is automatically tagged `[BEST TODAY]` and selected by the `inference.py` script.
+        Location: Karachi, Pakistan (24.86°N, 67.00°E)
+
+        Air quality and weather data come from Open-Meteo. Three models — Ridge
+        Regression, Random Forest, and a small neural network — are retrained daily,
+        and the best-performing model for each horizon is used automatically.
         """)
 
 
