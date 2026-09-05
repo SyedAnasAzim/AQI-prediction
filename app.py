@@ -16,9 +16,9 @@ HORIZON_LABELS = {
     "aqi_t+72h": "Next 72 Hours",
 }
 HORIZON_COLORS = {
-    "aqi_t+24h": "#6950f8",
-    "aqi_t+48h": "#cadd5b",
-    "aqi_t+72h": "#51cf5b",
+    "aqi_t+24h": "#fc0000",
+    "aqi_t+48h": "#065025",
+    "aqi_t+72h": "#621c70",
 }
 
 st.set_page_config(
@@ -292,7 +292,7 @@ def main():
     peak_label = HORIZON_LABELS.get(peak_row["horizon"], peak_row["horizon"])
     peak_time = peak_row["target_timestamp"].strftime("%b %d, %H:%M")
 
-    if max_predicted_aqi > 20:
+    if max_predicted_aqi > 200:
         st.markdown(f"""
         <div class="alert-card" style="border-color:#7b1e2e; background:rgba(123,30,46,0.12);">
             <strong>Severe air quality expected.</strong> The forecast peaks at
