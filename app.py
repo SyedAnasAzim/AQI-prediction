@@ -77,7 +77,7 @@ def us_aqi_gauge(aqi):
 
     aqi = float(aqi)
 
-    category, color = get_aqi_status(aqi)
+    category, color, emoji = get_aqi_status(aqi)
 
     # Slightly darker version for active bar
     active_color = darken_color(color, 0.65)
