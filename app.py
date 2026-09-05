@@ -53,25 +53,44 @@ def get_aqi_status(aqi_val):
         return "Hazardous", "#7e0023", "🟤"
 
 
+
 # --- gauge/speedometer func ---
+
+def darken_color(hex_color, factor=0.65):
+    """
+    Makes the active AQI bar slightly darker
+    than the background AQI section.
+    """
+    hex_color = hex_color.lstrip("#")
+
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+
+    r = int(r * factor)
+    g = int(g * factor)
+    b = int(b * factor)
+
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 def us_aqi_gauge(aqi):
 
     aqi = float(aqi)
 
-    # Get current AQI category and color
-    category, aqi_color, emoji = get_aqi_status(aqi)
+    category, color = get_aqi_category(aqi)
+
+    # Slightly darker version for active bar
+    active_color = darken_color(color, 0.65)
 
     fig = go.Figure(
         go.Indicator(
             mode="gauge+number",
-
             value=aqi,
 
             number={
                 "font": {
                     "size": 42,
-                    "color": aqi_color
+                    "color": color
                 }
             },
 
@@ -83,19 +102,26 @@ def us_aqi_gauge(aqi):
             },
 
             gauge={
+                "shape": "angular",
+
                 "axis": {
                     "range": [0, 500],
-                    "tickvals": [0, 50, 100, 150, 200, 300, 500],
+                    "tickvals": [
+                        0, 50, 100, 150,
+                        200, 300, 500
+                    ],
                     "tickfont": {
                         "size": 10
                     }
                 },
 
+                # Active portion
                 "bar": {
-                    "color": aqi_color,
+                    "color": active_color,
                     "thickness": 0.20
                 },
 
+                # AQI ranges
                 "steps": [
                     {
                         "range": [0, 50],
@@ -124,22 +150,29 @@ def us_aqi_gauge(aqi):
                 ],
 
                 "borderwidth": 0
+            },
+
+            domain={
+                "x": [0, 1],
+                "y": [0.20, 1]
             }
         )
     )
 
     fig.update_layout(
-        height=280,
+        height=320,
+
         margin=dict(
             l=10,
             r=10,
-            t=35,
-            b=5
+            t=20,
+            b=0
         ),
+
         paper_bgcolor="rgba(0,0,0,0)"
     )
 
-    return fig, category, aqi_color, emoji
+    return fig, category, color
 
 
 @st.cache_data(ttl=300, show_spinner="Fetching latest predictions & actuals...")
@@ -212,13 +245,15 @@ def main():
 
         st.markdown(
             f"""
-            <h3 style="
+            <div style="
                 text-align: center;
                 color: {color};
-                margin-top: -25px;
+                font-size: 24px;
+                font-weight: 700;
+                margin-top: -55px;
             ">
                 {category}
-            </h3>
+            </div>
             """,
             unsafe_allow_html=True
         )
