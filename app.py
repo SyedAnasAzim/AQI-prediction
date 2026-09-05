@@ -337,7 +337,7 @@ def main():
         """, unsafe_allow_html=True)
 
     with right:
-        st.markdown("### <u>Pollutants</u>")
+        st.markdown("### <u>Pollutants</u>", unsafe_allow_html=True)
         with st.container(border=True):
             c1, c2 = st.columns(2)
             c1.metric("PM2.5", f"{latest_actual_row['pm2_5']} µg/m³")
