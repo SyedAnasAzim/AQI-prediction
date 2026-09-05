@@ -39,53 +39,85 @@ def retry(fn, *, retries=3, delay=10, backoff=2, label="operation"):
     raise last_exc
 
 # --- gauge/speedometer func ---
+
 def us_aqi_gauge(aqi):
 
-    fig = go.Figure(go.Indicator(
+    fig = go.Figure()
+
+    # Continuous gradient
+    gradient_colors = [
+        "#00E400",
+        "#4FE000",
+        "#9BDC00",
+        "#FFFF00",
+        "#FFD000",
+        "#FF7E00",
+        "#FF3B00",
+        "#FF0000",
+        "#D0004F",
+        "#8F3F97",
+        "#7E0023"
+    ]
+
+    # Draw many small sections to simulate a continuous gradient
+    n = len(gradient_colors)
+    section_width = 500 / n
+
+    for i, color in enumerate(gradient_colors):
+        start = i * section_width
+        end = (i + 1) * section_width
+
+        fig.add_trace(go.Indicator(
+            mode="gauge",
+            value=aqi,
+            gauge={
+                "axis": {"range": [0, 500], "visible": False},
+                "bar": {"color": "rgba(0,0,0,0)"},
+                "bgcolor": "rgba(0,0,0,0)",
+                "borderwidth": 0,
+                "steps": [
+                    {
+                        "range": [start, end],
+                        "color": color
+                    }
+                ]
+            },
+            domain={"x": [0, 1], "y": [0, 1]}
+        ))
+
+    # Main needle/value overlay
+    fig.add_trace(go.Indicator(
         mode="gauge+number",
         value=aqi,
         number={
-            "font": {"size": 45}
-        },
-        title={
-            "text": "US AQI",
-            "font": {"size": 24}
+            "font": {
+                "size": 32
+            }
         },
         gauge={
             "axis": {
                 "range": [0, 500],
                 "tickvals": [0, 50, 100, 150, 200, 300, 500],
-                "ticktext": ["0", "50", "100", "150", "200", "300", "500"]
+                "tickfont": {"size": 9}
             },
-
             "bar": {
-                "color": "black",
-                "thickness": 0.15
+                "color": "#222222",
+                "thickness": 0.18
             },
-
-            "steps": [
-                {"range": [0, 50], "color": "#00E400"},
-                {"range": [50, 100], "color": "#FFFF00"},
-                {"range": [100, 150], "color": "#FF7E00"},
-                {"range": [150, 200], "color": "#FF0000"},
-                {"range": [200, 300], "color": "#8F3F97"},
-                {"range": [300, 500], "color": "#7E0023"},
-            ],
-
-            "threshold": {
-                "line": {
-                    "color": "black",
-                    "width": 5
-                },
-                "thickness": 0.8,
-                "value": aqi
-            }
-        }
+            "bgcolor": "rgba(0,0,0,0)",
+            "borderwidth": 0
+        },
+        title={
+            "text": "US AQI",
+            "font": {"size": 16}
+        },
+        domain={"x": [0, 1], "y": [0, 1]}
     ))
 
     fig.update_layout(
-        height=400,
-        margin=dict(l=30, r=30, t=80, b=20)
+        height=220,
+        margin=dict(l=10, r=10, t=35, b=5),
+        paper_bgcolor="rgba(0,0,0,0)"
     )
 
     return fig
@@ -210,7 +242,10 @@ def main():
         
     st.plotly_chart(
         us_aqi_gauge(latest_actual_aqi),
-        use_container_width=True
+        use_container_width=True,
+        config = {
+            "displayModeBar": False
+        }
     )
 
     st.markdown("---")
