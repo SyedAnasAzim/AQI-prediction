@@ -4,8 +4,6 @@ numpy
 requests
 scikit-learn
 tensorflow
-hopsworks[python] == 5.0.*
-nest_asyncio
 python-dotenv
 plotly
 joblib
