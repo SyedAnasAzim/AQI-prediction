@@ -17,6 +17,9 @@ WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
 AIR_QUALITY_VARS = "pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,dust,ammonia,us_aqi"
 WEATHER_VARS = "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,surface_pressure,precipitation,cloud_cover"
 
+DATA_FOLDER = "data"
+DATA_6D_FILE_NAME = "hourly_data_6d"
+
 CITIES = {
     "Karachi": (24.8607, 67.0011),
 }
@@ -51,9 +54,11 @@ def retry(fn, *, retries=3, delay=10, backoff=2, label="operation"):
                 current_delay *= backoff
     raise last_exc
 
+def saving_row_to_log(row):
+    row.to_csv(f"{DATA_FOLDER}/{DATA_6D_FILE_NAME}.csv",mode="a",header=False,index=False)
 
-resp_aqi = requests.get(AIR_QUALITY_URL, params=params_aqi, timeout=30)
-resp_weather = requests.get(WEATHER_URL, params=params_weather, timeout=30)
+resp_aqi = retry(lambda: requests.get(AIR_QUALITY_URL, params=params_aqi, timeout=30), retries=3, delay=10, backoff=2, label="AQI_data")
+resp_weather = retry(lambda: requests.get(WEATHER_URL, params=params_weather, timeout=30), retries=3, delay=10, backoff=2, label="Weather_data")
 
 resp_aqi.raise_for_status()
 resp_weather.raise_for_status()
