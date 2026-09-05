@@ -16,9 +16,9 @@ HORIZON_LABELS = {
     "aqi_t+72h": "Next 72 Hours",
 }
 HORIZON_COLORS = {
-    "aqi_t+24h": "#c17a3d",
-    "aqi_t+48h": "#9d4f4f",
-    "aqi_t+72h": "#5a5f8a",
+    "aqi_t+24h": "#5b82d6",
+    "aqi_t+48h": "#3459b8",
+    "aqi_t+72h": "#1f3d99",
 }
 
 st.set_page_config(
@@ -31,40 +31,89 @@ load_dotenv()
 
 
 # ----------------------------------------------------------------------
-# Styling — quiet, neutral, editorial. One accent reserved for AQI severity.
+# Styling — blue accent system, dark-theme friendly
 # ----------------------------------------------------------------------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+    --blue-1: #1f3d99;
+    --blue-2: #3459b8;
+    --blue-3: #5b82d6;
+    --blue-4: #82a4e8;
+    --blue-5: #aecafd;
+}
 
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
 }
+
 h1, h2, h3 {
     font-family: 'Source Serif 4', serif;
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: -0.01em;
+    color: #eaf0ff;
 }
+
+h1 {
+    background: linear-gradient(90deg, var(--blue-4), var(--blue-5));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: inline-block;
+}
+
 .block-container {
     padding-top: 2rem;
     max-width: 1200px;
 }
+
 [data-testid="stMetricValue"] {
     font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    color: #f0f4ff;
+}
+
+[data-testid="stMetricLabel"] {
+    color: var(--blue-4);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
     font-weight: 600;
 }
-[data-testid="stMetricLabel"] {
-    color: #8a8a8a;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+
+[data-testid="stMetricDelta"] {
+    color: var(--blue-5) !important;
 }
+
+hr {
+    border: none;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--blue-2), transparent);
+    margin: 1.5rem 0;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] > div {
+    border: 1px solid rgba(91, 130, 214, 0.25) !important;
+    background: rgba(52, 89, 184, 0.06);
+    border-radius: 10px;
+}
+
 .reading-time {
-    color: #8a8a8a;
+    color: var(--blue-4);
     font-size: 0.8rem;
     font-style: italic;
     margin-top: -8px;
 }
+
+.location-line {
+    color: var(--blue-4);
+    font-size: 0.88rem;
+    margin-top: -8px;
+    margin-bottom: 1.2rem;
+    font-weight: 500;
+}
+
 .status-badge {
     display: inline-flex;
     align-items: center;
@@ -72,19 +121,27 @@ h1, h2, h3 {
     font-size: 1.1rem;
     font-weight: 600;
 }
+
 .status-dot {
     width: 10px;
     height: 10px;
     border-radius: 50%;
     display: inline-block;
 }
+
 .alert-card {
-    border-left: 4px solid;
+    border-left: 4px solid var(--blue-2);
     padding: 0.9rem 1.2rem;
-    border-radius: 4px;
+    border-radius: 6px;
     margin-bottom: 1rem;
     font-size: 0.95rem;
     line-height: 1.5;
+    background: rgba(52, 89, 184, 0.10);
+}
+
+.stSelectbox label {
+    color: var(--blue-4) !important;
+    font-weight: 600;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -109,21 +166,21 @@ def retry(fn, *, retries=3, delay=10, backoff=2, label="operation"):
 
 
 # ----------------------------------------------------------------------
-# AQI category — muted-but-legible palette, no emoji
+# AQI category
 # ----------------------------------------------------------------------
 def get_aqi_status(aqi_val):
     if aqi_val <= 50:
-        return "Good", "#3f9142"
+        return "Good", "#2e7d32"
     elif aqi_val <= 100:
         return "Moderate", "#c9a227"
     elif aqi_val <= 150:
-        return "Unhealthy for Sensitive Groups", "#c17a3d"
+        return "Unhealthy for Sensitive Groups", "#d97b29"
     elif aqi_val <= 200:
-        return "Unhealthy", "#b33f3f"
+        return "Unhealthy", "#c0392b"
     elif aqi_val <= 300:
-        return "Very Unhealthy", "#7a4a8f"
+        return "Very Unhealthy", "#8e44ad"
     else:
-        return "Hazardous", "#6b1f2a"
+        return "Hazardous", "#7b1e2e"
 
 
 def darken_color(hex_color, factor=0.8):
@@ -135,29 +192,28 @@ def darken_color(hex_color, factor=0.8):
 def us_aqi_gauge(aqi):
     aqi = float(aqi)
     category, color = get_aqi_status(aqi)
-    active_color = darken_color(color, 0.85)
 
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=aqi,
-        number={"font": {"size": 72, "color": color, "family": "Inter"}},
-        title={"text": "US AQI", "font": {"size": 15, "family": "Inter", "color": "#9a9a9a"}},
+        number={"font": {"size": 76, "color": color, "family": "Inter"}},
+        title={"text": "US AQI", "font": {"size": 15, "family": "Inter", "color": "#a8a8a8"}},
         gauge={
             "shape": "angular",
             "axis": {
                 "range": [0, 500],
                 "tickvals": [0, 50, 100, 150, 200, 300, 500],
-                "tickfont": {"size": 9, "color": "#9a9a9a"},
+                "tickfont": {"size": 10, "color": "#a8a8a8"},
             },
-            "bar": {"color": active_color, "thickness": 0.20},
-            "threshold": {"line": {"color": active_color, "width": 3}, "thickness": 0.85, "value": aqi},
+            "bar": {"color": color, "thickness": 0.22},
+            "threshold": {"line": {"color": "#ffffff", "width": 3}, "thickness": 0.88, "value": aqi},
             "steps": [
-                {"range": [0, 50], "color": "#1f3d24"},
-                {"range": [50, 100], "color": "#3d3a1f"},
-                {"range": [100, 150], "color": "#3d2f1f"},
-                {"range": [150, 200], "color": "#3d1f1f"},
-                {"range": [200, 300], "color": "#332038"},
-                {"range": [300, 500], "color": "#331f24"},
+                {"range": [0, 50], "color": "#2e7d32"},
+                {"range": [50, 100], "color": "#c9a227"},
+                {"range": [100, 150], "color": "#d97b29"},
+                {"range": [150, 200], "color": "#c0392b"},
+                {"range": [200, 300], "color": "#8e44ad"},
+                {"range": [300, 500], "color": "#7b1e2e"},
             ],
             "borderwidth": 0,
         },
@@ -200,13 +256,12 @@ def load_data():
 # Main
 # ----------------------------------------------------------------------
 def main():
-    st.markdown("#Air Quality")
+    st.markdown("# Karachi Air Quality")
     st.caption("Hourly forecasts from an ensemble of Ridge, Random Forest, and Neural Network models.")
     st.markdown(
-    '<div style="color:#8a8a8a; font-size:0.85rem; margin-top:-8px; margin-bottom:1rem;">'
-    'Karachi, Pakistan · 24.8607°N, 67.0011°E</div>',
-    unsafe_allow_html=True
-)
+        '<div class="location-line">📍 Karachi, Pakistan · 24.8607°N, 67.0011°E</div>',
+        unsafe_allow_html=True
+    )
 
     try:
         df_preds, df_shap, df_actuals = load_data()
@@ -230,8 +285,7 @@ def main():
     latest_actual_time = latest_actual_row["timestamp"].strftime("%b %d, %H:%M")
 
     # ------------------------------------------------------------------
-    # Alert — only surfaced with real weight when conditions warrant it.
-    # A calm day gets a quiet line, not a banner.
+    # Alert — only surfaced with weight when conditions warrant it
     # ------------------------------------------------------------------
     max_predicted_aqi = latest_preds["predicted_aqi"].max()
     peak_row = latest_preds[latest_preds["predicted_aqi"] == max_predicted_aqi].iloc[0]
@@ -240,7 +294,7 @@ def main():
 
     if max_predicted_aqi > 200:
         st.markdown(f"""
-        <div class="alert-card" style="border-color:#6b1f2a; background:#fbf0f1;">
+        <div class="alert-card" style="border-color:#7b1e2e; background:rgba(123,30,46,0.12);">
             <strong>Severe air quality expected.</strong> The forecast peaks at
             {round(max_predicted_aqi, 1)} AQI ({peak_label}, around {peak_time}).
             Avoid outdoor activity where possible and consider a mask outdoors.
@@ -248,7 +302,7 @@ def main():
         """, unsafe_allow_html=True)
     elif max_predicted_aqi > 150:
         st.markdown(f"""
-        <div class="alert-card" style="border-color:#c17a3d; background:#fbf3ec;">
+        <div class="alert-card" style="border-color:#d97b29; background:rgba(217,123,41,0.12);">
             <strong>Unhealthy air quality expected.</strong> Peak forecast is
             {round(max_predicted_aqi, 1)} AQI ({peak_label}, around {peak_time}).
             Sensitive groups should limit time outdoors.
@@ -256,12 +310,12 @@ def main():
         """, unsafe_allow_html=True)
     elif max_predicted_aqi > 100:
         st.markdown(f"""
-        <div class="alert-card" style="border-color:#c9a227; background:#fbf7ea;">
+        <div class="alert-card" style="border-color:#c9a227; background:rgba(201,162,39,0.12);">
             Air quality trends moderate over the coming days — peak forecast of
             {round(max_predicted_aqi, 1)} AQI ({peak_label}).
         </div>
         """, unsafe_allow_html=True)
-    # No banner at all when the forecast stays good — nothing to flag.
+    # No banner when the forecast stays good.
 
     st.markdown("---")
 
@@ -285,33 +339,35 @@ def main():
     with right:
         st.markdown("##### Pollutants")
         with st.container(border=True):
-            c1, c2, c3 = st.columns(3)
+            c1, c2 = st.columns(2)
             c1.metric("PM2.5", f"{latest_actual_row['pm2_5']} µg/m³")
             c2.metric("PM10", f"{latest_actual_row['pm10']} µg/m³")
-            c3.metric("Carbon Monoxide", f"{latest_actual_row['carbon_monoxide']} µg/m³")
 
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Nitrogen Dioxide", f"{latest_actual_row['nitrogen_dioxide']} µg/m³")
-            c2.metric("Sulphur Dioxide", f"{latest_actual_row['sulphur_dioxide']} µg/m³")
-            c3.metric("Ozone", f"{latest_actual_row['ozone']} µg/m³")
+            c1, c2 = st.columns(2)
+            c1.metric("Carbon Monoxide", f"{latest_actual_row['carbon_monoxide']} µg/m³")
+            c2.metric("Nitrogen Dioxide", f"{latest_actual_row['nitrogen_dioxide']} µg/m³")
+
+            c1, c2 = st.columns(2)
+            c1.metric("Sulphur Dioxide", f"{latest_actual_row['sulphur_dioxide']} µg/m³")
+            c2.metric("Ozone", f"{latest_actual_row['ozone']} µg/m³")
 
             st.metric("Dust", f"{latest_actual_row['dust']} µg/m³")
 
     st.markdown("---")
-    st.markdown("##### Weather Conditions")
-    with st.container(border=True):
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Temperature", f"{latest_actual_row['temperature_2m']} °C")
-        c2.metric("Humidity", f"{latest_actual_row['relative_humidity_2m']}%")
-        c3.metric("Wind Speed", f"{latest_actual_row['wind_speed_10m']} km/h")
-        c4.metric("Wind Direction", f"{latest_actual_row['wind_direction_10m']}°")
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Pressure", f"{latest_actual_row['surface_pressure']} hPa")
-        c2.metric("Precipitation", f"{latest_actual_row['precipitation']} mm")
-        c3.metric("Cloud Cover", f"{latest_actual_row['cloud_cover']}%")
+    st.markdown("##### Weather")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Temperature", f"{latest_actual_row['temperature_2m']} °C")
+    c2.metric("Humidity", f"{latest_actual_row['relative_humidity_2m']}%")
+    c3.metric("Wind Speed", f"{latest_actual_row['wind_speed_10m']} km/h")
+    c4.metric("Wind Direction", f"{latest_actual_row['wind_direction_10m']}°")
 
-        st.markdown("---")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Pressure", f"{latest_actual_row['surface_pressure']} hPa")
+    c2.metric("Precipitation", f"{latest_actual_row['precipitation']} mm")
+    c3.metric("Cloud Cover", f"{latest_actual_row['cloud_cover']}%")
+
+    st.markdown("---")
 
     # ------------------------------------------------------------------
     # Forecast cards
@@ -352,7 +408,7 @@ def main():
         recent_actuals = df_actuals.sort_values("timestamp").tail(144)
         fig.add_trace(go.Scatter(
             x=recent_actuals["timestamp"], y=recent_actuals["us_aqi"],
-            mode="lines", name="Actual AQI", line=dict(color="#3a3a3a", width=2)
+            mode="lines", name="Actual AQI", line=dict(color="#82a4e8", width=2.5)
         ))
         for hori, group in df_preds.groupby("horizon"):
             fig.add_trace(go.Scatter(
@@ -364,8 +420,11 @@ def main():
         fig.update_layout(
             xaxis_title=None, yaxis_title="US AQI",
             hovermode="x unified", margin=dict(l=0, r=0, t=10, b=0),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                        font=dict(color="#a8bce8")),
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(gridcolor="rgba(91,130,214,0.15)", color="#a8bce8"),
+            yaxis=dict(gridcolor="rgba(91,130,214,0.15)", color="#a8bce8"),
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -392,11 +451,13 @@ def main():
             fig_shap = px.bar(
                 df_shap_plot.sort_values("shap_value"),
                 x="shap_value", y="feature_name", orientation="h",
-                color="shap_value", color_continuous_scale=["#b33f3f", "#e8e8e8", "#3f6b91"],
+                color="shap_value", color_continuous_scale=["#c0392b", "#3a3f4b", "#5b82d6"],
                 labels={"feature_name": "", "shap_value": "Impact on prediction"},
             )
             fig_shap.update_layout(
-                yaxis=dict(autorange="reversed"), margin=dict(l=0, r=0, t=10, b=0),
+                yaxis=dict(autorange="reversed", color="#a8bce8"),
+                xaxis=dict(color="#a8bce8"),
+                margin=dict(l=0, r=0, t=10, b=0),
                 plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                 coloraxis_showscale=False,
             )
