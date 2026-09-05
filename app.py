@@ -8,6 +8,10 @@ import hopsworks
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
+DATA_FOLDER = "data"
+DATA_6D_FILE_NAME = "hourly_data_6d"
+
+
 # Set page configuration
 st.set_page_config(
     page_title="Karachi AQI Forecast Dashboard",
@@ -56,13 +60,11 @@ def get_hopsworks_project():
 
 @st.cache_data(ttl=300, show_spinner="Fetching latest predictions & actuals...")
 def load_data():
-    project = get_hopsworks_project()
-    fs = retry(lambda: project.get_feature_store(), retries=2, label="Get Feature Store")
+    # project = get_hopsworks_project()
+    # fs = retry(lambda: project.get_feature_store(), retries=2, label="Get Feature Store")
 
     # 1. Fetch Predictions from Local Repository CSV
     csv_file = "predictions_log.csv"
-    if not os.path.exists(csv_file):
-        csv_file = "predictions.csv"
 
     if os.path.exists(csv_file):
         df_preds = pd.read_csv(csv_file)
@@ -73,19 +75,20 @@ def load_data():
         ])
 
     # 2. Fetch Latest SHAP Values from Hopsworks with Retry
-    def _read_shap():
-        fg = fs.get_feature_group(name="aqi_shap_values", version=1)
-        return fg.read()
+    # def _read_shap():
+    #     fg = fs.get_feature_group(name="aqi_shap_values", version=1)
+    #     return fg.read()
 
-    df_shap = retry(_read_shap, retries=3, delay=10, label="Read SHAP Feature Group")
+    # df_shap = retry(_read_shap, retries=3, delay=10, label="Read SHAP Feature Group")
+    df_shap = pd.read_csv(f"{DATA_FOLDER}/aqi_shap_values.csv")
 
     # 3. Fetch Raw/Actual AQI Data for Karachi from Hopsworks with Retry
-    def _read_actuals():
-        fg = fs.get_feature_group(name="karachi_aqi", version=1)
-        return fg.filter(fg.timestamp >= datetime.now() - timedelta(days=5)).read()
+    # def _read_actuals():
+    #     fg = fs.get_feature_group(name="karachi_aqi", version=1)
+    #     return fg.filter(fg.timestamp >= datetime.now() - timedelta(days=5)).read()
 
-    df_actuals = retry(_read_actuals, retries=3, delay=10, label="Read Actuals Feature Group")
-
+    # df_actuals = retry(_read_actuals, retries=3, delay=10, label="Read Actuals Feature Group")
+    df_actuals = pd.read_csv(f"{DATA_FOLDER}/{DATA_6D_FILE_NAME}.csv")
     return df_preds, df_shap, df_actuals
 
 
@@ -200,8 +203,8 @@ def main():
         
         fig = go.Figure()
 
-        # Actual AQI trace (last 7 days)
-        recent_actuals = df_actuals.sort_values("timestamp").tail(168)
+        # Actual AQI trace (last 6 days)
+        recent_actuals = df_actuals.sort_values("timestamp").tail(144)
         fig.add_trace(go.Scatter(
             x=recent_actuals["timestamp"],
             y=recent_actuals["us_aqi"],
