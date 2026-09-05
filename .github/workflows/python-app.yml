@@ -35,9 +35,9 @@ jobs:
               run: |
                  git config user.name "aqi-bot"
                  git config user.email "aqi-bot@users.noreply.github.com"
+                 git add data/hourly_data_6d.csv 
+                 git diff --cached --quiet || git commit -m "daily training: update data_6d.csv and shap background"
                  git pull --rebase
-                 git add data/hourly_data_6d.csv
-                 git diff --cached --quiet || git commit -m "hourly data update: update data_6d.csv"
                  git push
             
         
