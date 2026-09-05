@@ -172,7 +172,7 @@ def us_aqi_gauge(aqi):
         paper_bgcolor="rgba(0,0,0,0)"
     )
 
-    return fig, category, color
+    return fig, category, color, emoji
 
 
 @st.cache_data(ttl=300, show_spinner="Fetching latest predictions & actuals...")
