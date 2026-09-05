@@ -3,16 +3,28 @@ import joblib
 import numpy as np
 import pandas as pd
 import hopsworks
+import tempfile
 
 from dotenv import load_dotenv
-from datetime import timedelta
+from datetime import datetime, timedelta
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from scripts.update_data import retry
+
 
 import tensorflow as tf
 from tensorflow.keras import layers, models, callbacks
+
+from feature_engineering import (
+    clean_raw,
+    compute_features,
+    add_targets,
+    get_feature_sets as shared_get_feature_sets,
+    HORIZONS,
+    LAGS,
+)
 
 
 # ----------------------------------------------------------------------
@@ -21,11 +33,24 @@ from tensorflow.keras import layers, models, callbacks
 ROLLING_WINDOW_DAYS = 730  # ~2 years — keeps full seasonal coverage; currently a no-op
                             # since the dataset doesn't yet exceed this span, but will
                             # begin trimming the oldest data once it does
-HORIZONS = ["aqi_t+24h", "aqi_t+48h", "aqi_t+72h"]
 RIDGE_ALPHAS = [0.01, 0.1, 1.0, 10.0, 50.0, 100.0, 500.0, 1000.0, 5000.0, 10000.0]
-LAGS = [1, 2, 3, 24, 48, 72]
+
+# HORIZONS and LAGS now live in feature_engineering.py (imported below) so
+# training and inference can never define them differently.
 
 SAVE_ROOT = "saved_models"
+
+
+DATA_FOLDER = "data"
+os.makedirs(DATA_FOLDER,exist_ok=True)
+DATA_6D_FILE_NAME = "hourly_data_6d"
+
+# --- SHAP background sample config ---
+SHAP_BACKGROUND_FG_NAME = "shap_background_karachi_aqi"
+SHAP_BACKGROUND_FG_VERSION = 1
+SHAP_BACKGROUND_N_SAMPLES = 150  # target size of the reference sample
+SHAP_STRAT_COLS = ["month", "hour"]  # stratify so all seasons/times of day are represented
+SHAP_RANDOM_STATE = 42
 
 
 def rmse(y_true, y_pred):
@@ -48,92 +73,49 @@ def fetch_raw_data():
 
     fs = project.get_feature_store()
     fg = fs.get_feature_group(name="karachi_aqi", version=1)
-    df = fg.read()
+    df = retry(df.read, retries=3, delay=10, backoff=2, label="Reading")
+    # df = fg.read()
 
     return project, df, fg
 
+def saving_data_for_inference(df):
+    cutoff = df["timestamp"].max() - timedelta(days=6)
+    df_inf = df[df["timestamp"] >= cutoff].copy()
+
+    final_path = f"{DATA_FOLDER}/{DATA_6D_FILE_NAME}.csv"
+    dir_name = os.path.dirname(os.path.abspath(final_path)) or "."
+
+    fd, tmp_path = tempfile.mkstemp(suffix=".csv.tmp", dir=dir_name)
+    try:
+        os.close(fd)
+        df_inf.to_csv(tmp_path)
+        os.replace(tmp_path, final_path)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
 
 # ----------------------------------------------------------------------
-# 2. Preprocessing — replicates every step from the EDA/feature-engineering notebook
+# 2. Preprocessing — now delegates to feature_engineering.py, the module
+#    shared with inference.py, so training and serving can never compute
+#    features differently by accident.
 # ----------------------------------------------------------------------
 def preprocess(raw_df, fg):
-    df = raw_df.copy()
+    # Clean + fill short gaps; write back any interpolated rows that were
+    # missing from the raw feature group (unchanged behavior from before).
+    df, missing_df = clean_raw(raw_df)
+    if len(missing_df) > 0:
+        fg.insert(missing_df.reset_index())
 
-    # Drop any Hopsworks-internal index/id columns if present
-    for col in ["Unnamed: 0"]:
-        if col in df.columns:
-            df = df.drop(columns=[col])
+    # Shared feature computation (time-based, derived, rolling, lag, cyclic).
+    df = compute_features(df)
 
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
-    df = df.sort_values("timestamp").set_index("timestamp")
-    print(df.sample(2).index)
-    expected = pd.date_range(
-    start=df.index.min(),
-    end=df.index.max(),
-    freq="h"
-    )
+    # Training-only: create the 3 forecast-horizon targets.
+    df = add_targets(df)
 
-    missing_rows = expected.difference(df.index)
-
-
-    # Reindex to a full hourly range and interpolate short gaps only (limit=2),
-    # so longer genuine outages are left as NaN rather than fabricated
-    full_index = pd.date_range(df.index.min(), df.index.max(), freq="h")
-    full_index.name = "timestamp" 
-    df = df.reindex(full_index)
-    df = df.interpolate(method="time", limit=2)
-    print(df.sample(2).index)
-
-    missing_df = df.loc[missing_rows].copy()
-    missing_df.index.name = "timestamp"
-    int_cols = ["us_aqi", "relative_humidity_2m", "wind_direction_10m", "cloud_cover"]
-    missing_df[int_cols] = missing_df[int_cols].round().astype("int64")
-    fg.insert(missing_df.reset_index()) 
-    print(df.sample(2).index)
-    # Time-based features
-    df["month"] = df.index.month - 1
-    df["day_of_week"] = df.index.day_of_week
-    df["is_weekday"] = (df["day_of_week"] < 5).astype(int)
-
-    df["hour"] = df.index.hour
-
-
-    # AQI change rate — derived feature named explicitly in the project spec
-    df["aqi_change_rate_1h"] = df["us_aqi"].diff(1)
-    df["aqi_change_rate_24h"] = df["us_aqi"].diff(24)
-
-    # Rolling statistics
-    df["rolling_mean_24h"] = df["us_aqi"].rolling(window=24).mean()
-    df["rolling_std_24h"] = df["us_aqi"].rolling(window=24).std()
-
-    # Lag features — chosen from PACF analysis in the EDA notebook (lags 1-3
-    # capture short-term AR structure; 24/48/72 capture daily seasonality and
-    # align with the forecast horizons)
-    for lag in LAGS:
-        df[f"us_aqi_lag{lag}"] = df["us_aqi"].shift(lag)
-
-    # Cyclic encoding for time-based and directional features
-    df["day_of_week_sin"] = np.sin(2 * np.pi * df["day_of_week"] / 7)
-    df["day_of_week_cos"] = np.cos(2 * np.pi * df["day_of_week"] / 7)
-    df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
-    df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
-    df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
-    df["hour_cos"] = np.cos(2 * np.pi * df["hour"] / 24)
-    df["wind_direction_10m_sin"] = np.sin(2 * np.pi * df["wind_direction_10m"] / 360)
-    df["wind_direction_10m_cos"] = np.cos(2 * np.pi * df["wind_direction_10m"] / 360)
-
-    # Targets — shifted forward for each forecast horizon
-    df["aqi_t+24h"] = df["us_aqi"].shift(-24)
-    df["aqi_t+48h"] = df["us_aqi"].shift(-48)
-    df["aqi_t+72h"] = df["us_aqi"].shift(-72)
-
-
-    df = df.drop(columns=["ammonia"])
     # Drop rows with NaNs introduced by lagging/rolling/target-shifting
-    # (expected: ~72 rows at the start, ~72 at the end, per the EDA notebook's
-    # confirmed-contiguous check)
+    # (expected: ~72 rows at the start, ~72 at the end).
     df = df.dropna(axis=0)
-    print(df.sample(2).index)
     return df
 
 
@@ -163,18 +145,11 @@ def time_based_split(df):
 
 # ----------------------------------------------------------------------
 # 5. Feature set definitions (Set A: tree-based, Set B: linear/NN scaled)
+#    Delegates to feature_engineering.py so training and inference always
+#    slice features identically.
 # ----------------------------------------------------------------------
 def get_feature_sets(df):
-    tree_drop = ["city", "day"] + HORIZONS
-    tree_cols = [c for c in df.columns if c not in tree_drop]
-
-    linear_drop = [
-        "city", "hour", "day_of_week", "month",
-        "wind_direction_10m", "dust"
-    ] + HORIZONS
-    linear_cols = [c for c in df.columns if c not in linear_drop]
-
-    return tree_cols, linear_cols
+    return shared_get_feature_sets(df)
 
 
 def build_nn(input_dim):
@@ -197,21 +172,101 @@ def build_nn(input_dim):
 
 
 # ----------------------------------------------------------------------
+# 5b. SHAP background/reference sample
+# ----------------------------------------------------------------------
+def build_shap_background_sample(
+    df,
+    feature_cols,
+    strat_cols=SHAP_STRAT_COLS,
+    n_samples=SHAP_BACKGROUND_N_SAMPLES,
+    random_state=SHAP_RANDOM_STATE,
+):
+    """
+    Draws a small, seasonally-representative sample of engineered feature rows
+    to serve as the SHAP background/reference distribution at inference time.
+
+    Why not just use a rolling window of recent hours at inference time:
+    - Recent hours are highly autocorrelated (not independent samples), which
+      biases LinearExplainer's covariance estimate.
+    - A short recent window has no seasonal coverage (e.g. dust storms vs.
+      winter smog vs. monsoon humidity effects), so "typical" ends up meaning
+      "whatever conditions looked like this week."
+    - The SHAP base value (expected model output over the background set)
+      would drift hour to hour instead of representing a stable reference,
+      making SHAP values hard to compare across different prediction runs.
+
+    Strategy: take one row per (month, hour) bucket so the full seasonal /
+    diurnal cycle is represented, then subsample down to n_samples if that
+    produced more rows than needed. This is refreshed once a day (each
+    training run), matching the daily retrain cadence.
+    """
+    sampled = (
+        df.groupby(strat_cols, group_keys=False)
+        .apply(lambda g: g.sample(n=1, random_state=random_state))
+    )
+
+    if len(sampled) > n_samples:
+        sampled = sampled.sample(n=n_samples, random_state=random_state)
+
+    sampled = sampled[feature_cols].copy()
+    sampled = sampled.reset_index()  # brings "timestamp" back as a column
+    return sampled
+
+
+def save_shap_background_sample(fs, df, tree_cols, linear_cols):
+    """
+    Builds and saves/overwrites the SHAP background sample feature group.
+    """
+    feature_cols = sorted(set(tree_cols) | set(linear_cols))
+    background_df = build_shap_background_sample(df, feature_cols)
+    background_df.to_csv(f"{DATA_FOLDER}/{SHAP_BACKGROUND_FG_NAME}.csv",mode="w",index=False)
+    # background_fg = fs.get_or_create_feature_group(
+    #     name=SHAP_BACKGROUND_FG_NAME,
+    #     version=SHAP_BACKGROUND_FG_VERSION,
+    #     description=(
+    #         "Stratified (month, hour) sample of engineered feature rows, "
+    #         "used as the SHAP background/reference distribution for "
+    #         "LinearExplainer/KernelExplainer at inference time. "
+    #         "Refreshed daily by the training pipeline."
+    #     ),
+    #     primary_key=["timestamp"],
+    #     event_time="timestamp",
+    # )
+
+    # # insert() handles both first-time registration (creates the group's
+    # # schema from this dataframe) and subsequent writes — no separate
+    # # "save" step needed or exists for data in hsfs.
+    # background_fg.insert(
+    #     background_df,
+    #     write_options={"wait_for_job": True},
+    # )
+
+    print(
+        f"SHAP background sample saved: {len(background_df)} rows "
+        f"to '{SHAP_BACKGROUND_FG_NAME}.csv'"
+    )
+
+# ----------------------------------------------------------------------
 # 6. Main training routine
 # ----------------------------------------------------------------------
 def main():
     print("Fetching raw data from Hopsworks...")
     project, raw_df, fg = fetch_raw_data()
-
+    project, raw_df, fg = retry(fetch_raw_data, retries=3, delay=10, backoff=2, label="Login+fg")
+    print("Saving 6 days of data for inference...")
+    saving_data_for_inference(raw_df)
     print("Preprocessing / feature engineering...")
     df = preprocess(raw_df, fg)
-
     print("Applying rolling window...")
     df = apply_rolling_window(df)
     print(f"Training window: {df.index.min()} to {df.index.max()} ({len(df)} rows)")
 
     train, val, test = time_based_split(df)
     tree_cols, linear_cols = get_feature_sets(df)
+
+    print("Building SHAP background sample...")
+    fs = project.get_feature_store()
+    save_shap_background_sample(fs, df, tree_cols, linear_cols)
 
     X_train_rf, X_val_rf, X_test_rf = train[tree_cols], val[tree_cols], test[tree_cols]
     X_train_lin = train[linear_cols].copy()
@@ -256,7 +311,7 @@ def main():
             "test_rmse": rmse(y_test, ridge_pred),
         }
         print(f"Ridge (alpha={best_alpha}) — {all_metrics['ridge'][horizon]}")
-        print(f"Compared to persistence — R²: {(all_metrics['ridge'][horizon]['test_r2']-persist_r2)*100/persist_r2:.3f}, MAE: {(all_metrics['ridge'][horizon]['test_mae']-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['ridge'][horizon]['test_rmse']-persist_rmse)*100/persist_rmse:.3f}")
+        print(f"Compared to persistence — MAE: {(all_metrics['ridge'][horizon]['test_mae']-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['ridge'][horizon]['test_rmse']-persist_rmse)*100/persist_rmse:.3f}")
         # --- Random Forest ---
         rf_model = RandomForestRegressor(
             n_estimators=200, max_depth=8, min_samples_leaf=20,
@@ -271,7 +326,7 @@ def main():
             "test_rmse": rmse(y_test, rf_pred),
         }
         print(f"Random Forest — {all_metrics['rf'][horizon]}")
-        print(f"Compared to persistence — R²: {(all_metrics['rf'][horizon]['test_r2']-persist_r2)*100/persist_r2:.3f}, MAE: {(all_metrics['rf'][horizon]['test_mae']-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['rf'][horizon]['test_rmse']-persist_rmse)*100/persist_rmse:.3f}")
+        print(f"Compared to persistence — MAE: {(all_metrics['rf'][horizon]['test_mae']-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['rf'][horizon]['test_rmse']-persist_rmse)*100/persist_rmse:.3f}")
   
         # --- Neural Network (full retrain, same as Ridge/RF) ---
         tf.random.set_seed(42)
@@ -292,7 +347,7 @@ def main():
             "test_rmse": rmse(y_test, nn_pred),
         }
         print(f"Neural Network — {all_metrics['nn'][horizon]}")
-        print(f"Compared to persistence — R²: {(all_metrics['nn'][horizon]['test_r2']-persist_r2)*100/persist_r2:.3f}, MAE: {(all_metrics['nn'][horizon]['test_mae']-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['nn'][horizon]['test_rmse']-persist_rmse)*100/persist_rmse:.3f}")
+        print(f"Compared to persistence — MAE: {(all_metrics['nn'][horizon]['test_mae']-persist_mae)*100/persist_mae:.3f}, RMSE: {(all_metrics['nn'][horizon]['test_rmse']-persist_rmse)*100/persist_rmse:.3f}")
 
         # --- Identify today's best model for this horizon ---
         scores = {algo: all_metrics[algo][horizon]["test_mae"] for algo in ["ridge", "rf", "nn"]}
