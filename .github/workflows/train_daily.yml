@@ -3,7 +3,10 @@ name: Daily Model Training
 on:
   # schedule:
   #   - cron: "3 0 * * *"   # 03:00 UTC daily — after the hourly feature pipeline has caught up
-  workflow_dispatch:        # allows manual triggering from the Actions tab
+  workflow_dispatch:     # allows manual triggering from the Actions tab
+concurrency:
+  group: data-6d-writer
+  cancel-in-progress: false
 
 jobs:
   train:
