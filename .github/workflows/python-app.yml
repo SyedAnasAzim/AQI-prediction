@@ -37,7 +37,7 @@ jobs:
                  git config user.email "aqi-bot@users.noreply.github.com"
                  git add data/hourly_data_6d.csv 
                  git diff --cached --quiet || git commit -m "hourly data update: update data_6d.csv"
-                 git pull --rebase
+                 git pull --rebase -X theirs
                  git push
             
         
