@@ -337,7 +337,7 @@ def main():
         """, unsafe_allow_html=True)
 
     with right:
-        st.markdown("### <u>Pollutants</u>", unsafe_allow_html=True)
+        st.markdown("### Pollutants")
         with st.container(border=True):
             c1, c2 = st.columns(2)
             c1.metric("PM2.5", f"{latest_actual_row['pm2_5']} µg/m³")
@@ -356,16 +356,17 @@ def main():
     st.markdown("---")
 
     st.markdown("### Weather")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Temperature", f"{latest_actual_row['temperature_2m']} °C")
-    c2.metric("Humidity", f"{latest_actual_row['relative_humidity_2m']}%")
-    c3.metric("Wind Speed", f"{latest_actual_row['wind_speed_10m']} km/h")
-    c4.metric("Wind Direction", f"{latest_actual_row['wind_direction_10m']}°")
+    with st.container(border=True):
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Temperature", f"{latest_actual_row['temperature_2m']} °C")
+        c2.metric("Humidity", f"{latest_actual_row['relative_humidity_2m']}%")
+        c3.metric("Wind Speed", f"{latest_actual_row['wind_speed_10m']} km/h")
+        c4.metric("Wind Direction", f"{latest_actual_row['wind_direction_10m']}°")
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Pressure", f"{latest_actual_row['surface_pressure']} hPa")
-    c2.metric("Precipitation", f"{latest_actual_row['precipitation']} mm")
-    c3.metric("Cloud Cover", f"{latest_actual_row['cloud_cover']}%")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Pressure", f"{latest_actual_row['surface_pressure']} hPa")
+        c2.metric("Precipitation", f"{latest_actual_row['precipitation']} mm")
+        c3.metric("Cloud Cover", f"{latest_actual_row['cloud_cover']}%")
 
     st.markdown("---")
 
@@ -373,27 +374,27 @@ def main():
     # Forecast cards
     # ------------------------------------------------------------------
     st.markdown("### Next 3 Days Forecast")
+    with st.container(border=True):
+        horizons = sorted(latest_preds["horizon"].unique())
+        cols = st.columns(len(horizons) if horizons else 1)
 
-    horizons = sorted(latest_preds["horizon"].unique())
-    cols = st.columns(len(horizons) if horizons else 1)
+        for i, horizon in enumerate(horizons):
+            row = latest_preds[latest_preds["horizon"] == horizon].iloc[0]
+            aqi_val = round(row["predicted_aqi"], 1)
+            model_used = row["model_used"]
+            model_ver = row["model_version"]
+            target_ts = row["target_timestamp"].strftime("%b %d, %H:%M")
+            label = HORIZON_LABELS.get(horizon, horizon)
+            status, color = get_aqi_status(aqi_val)
 
-    for i, horizon in enumerate(horizons):
-        row = latest_preds[latest_preds["horizon"] == horizon].iloc[0]
-        aqi_val = round(row["predicted_aqi"], 1)
-        model_used = row["model_used"]
-        model_ver = row["model_version"]
-        target_ts = row["target_timestamp"].strftime("%b %d, %H:%M")
-        label = HORIZON_LABELS.get(horizon, horizon)
-        status, color = get_aqi_status(aqi_val)
-
-        with cols[i]:
-            st.metric(label=f"{label} · {target_ts}", value=f"{aqi_val} AQI",
-                      delta=f"{model_used.upper()} v{model_ver}", delta_color="off")
-            st.markdown(
-                f'<span class="status-badge" style="color:{color}; font-size:0.9rem;">'
-                f'<span class="status-dot" style="background:{color}; width:8px; height:8px;"></span>{status}</span>',
-                unsafe_allow_html=True
-            )
+            with cols[i]:
+                st.metric(label=f"{label} · {target_ts}", value=f"{aqi_val} AQI",
+                        delta=f"{model_used.upper()} v{model_ver}", delta_color="off")
+                st.markdown(
+                    f'<span class="status-badge" style="color:{color}; font-size:0.9rem;">'
+                    f'<span class="status-dot" style="background:{color}; width:8px; height:8px;"></span>{status}</span>',
+                    unsafe_allow_html=True
+                )
 
     st.markdown("---")
 
