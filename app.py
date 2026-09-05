@@ -37,89 +37,109 @@ def retry(fn, *, retries=3, delay=10, backoff=2, label="operation"):
                 current_delay *= backoff
     raise last_exc
 
+# --- AQI utility func ---
+def get_aqi_status(aqi_val):
+    if aqi_val <= 50:
+        return "Good", "#00e400", "🟢"
+    elif aqi_val <= 100:
+        return "Moderate", "#ffff00", "🟡"
+    elif aqi_val <= 150:
+        return "Unhealthy for Sensitive Groups", "#ff7e00", "🟠"
+    elif aqi_val <= 200:
+        return "Unhealthy", "#ff0000", "🔴"
+    elif aqi_val <= 300:
+        return "Very Unhealthy", "#8f3f97", "🟣"
+    else:
+        return "Hazardous", "#7e0023", "🟤"
+
+
 # --- gauge/speedometer func ---
 
 def us_aqi_gauge(aqi):
 
-    fig = go.Figure()
+    aqi = float(aqi)
 
-    # Continuous gradient
-    gradient_colors = [
-        "#00E400",
-        "#4FE000",
-        "#9BDC00",
-        "#FFFF00",
-        "#FFD000",
-        "#FF7E00",
-        "#FF3B00",
-        "#FF0000",
-        "#D0004F",
-        "#8F3F97",
-        "#7E0023"
-    ]
+    # Get current AQI category and color
+    category, aqi_color, emoji = get_aqi_status(aqi)
 
-    # Draw many small sections to simulate a continuous gradient
-    n = len(gradient_colors)
-    section_width = 500 / n
+    fig = go.Figure(
+        go.Indicator(
+            mode="gauge+number",
 
-    for i, color in enumerate(gradient_colors):
-        start = i * section_width
-        end = (i + 1) * section_width
-
-        fig.add_trace(go.Indicator(
-            mode="gauge",
             value=aqi,
+
+            number={
+                "font": {
+                    "size": 42,
+                    "color": aqi_color
+                }
+            },
+
+            title={
+                "text": "US AQI",
+                "font": {
+                    "size": 18
+                }
+            },
+
             gauge={
-                "axis": {"range": [0, 500], "visible": False},
-                "bar": {"color": "rgba(0,0,0,0)"},
-                "bgcolor": "rgba(0,0,0,0)",
-                "borderwidth": 0,
+                "axis": {
+                    "range": [0, 500],
+                    "tickvals": [0, 50, 100, 150, 200, 300, 500],
+                    "tickfont": {
+                        "size": 10
+                    }
+                },
+
+                "bar": {
+                    "color": aqi_color,
+                    "thickness": 0.20
+                },
+
                 "steps": [
                     {
-                        "range": [start, end],
-                        "color": color
+                        "range": [0, 50],
+                        "color": "#00e400"
+                    },
+                    {
+                        "range": [50, 100],
+                        "color": "#ffff00"
+                    },
+                    {
+                        "range": [100, 150],
+                        "color": "#ff7e00"
+                    },
+                    {
+                        "range": [150, 200],
+                        "color": "#ff0000"
+                    },
+                    {
+                        "range": [200, 300],
+                        "color": "#8f3f97"
+                    },
+                    {
+                        "range": [300, 500],
+                        "color": "#7e0023"
                     }
-                ]
-            },
-            domain={"x": [0, 1], "y": [0, 1]}
-        ))
+                ],
 
-    # Main needle/value overlay
-    fig.add_trace(go.Indicator(
-        mode="gauge+number",
-        value=aqi,
-        number={
-            "font": {
-                "size": 32
+                "borderwidth": 0
             }
-        },
-        gauge={
-            "axis": {
-                "range": [0, 500],
-                "tickvals": [0, 50, 100, 150, 200, 300, 500],
-                "tickfont": {"size": 9}
-            },
-            "bar": {
-                "color": "#222222",
-                "thickness": 0.18
-            },
-            "bgcolor": "rgba(0,0,0,0)",
-            "borderwidth": 0
-        },
-        title={
-            "text": "US AQI",
-            "font": {"size": 16}
-        },
-        domain={"x": [0, 1], "y": [0, 1]}
-    ))
+        )
+    )
 
     fig.update_layout(
-        height=220,
-        margin=dict(l=10, r=10, t=35, b=5),
+        height=280,
+        margin=dict(
+            l=10,
+            r=10,
+            t=35,
+            b=5
+        ),
         paper_bgcolor="rgba(0,0,0,0)"
     )
 
-    return fig
+    return fig, category, aqi_color, emoji
 
 
 @st.cache_data(ttl=300, show_spinner="Fetching latest predictions & actuals...")
@@ -143,22 +163,6 @@ def load_data():
     df_actuals = pd.read_csv(f"{DATA_FOLDER}/{DATA_6D_FILE_NAME}.csv")
 
     return df_preds, df_shap, df_actuals
-
-
-# --- AQI CATEGORY UTILS ---
-def get_aqi_status(aqi_val):
-    if aqi_val <= 50:
-        return "Good", "#00e400", "🟢"
-    elif aqi_val <= 100:
-        return "Moderate", "#ffff00", "🟡"
-    elif aqi_val <= 150:
-        return "Unhealthy for Sensitive Groups", "#ff7e00", "🟠"
-    elif aqi_val <= 200:
-        return "Unhealthy", "#ff0000", "🔴"
-    elif aqi_val <= 300:
-        return "Very Unhealthy", "#8f3f97", "🟣"
-    else:
-        return "Hazardous", "#7e0023", "🟤"
 
 
 # --- MAIN APP LAYOUT ---
@@ -196,16 +200,26 @@ def main():
     latest_actual_aqi = latest_actual_row["us_aqi"]
     left, right = st.columns([1, 2])
     with left:
+        fig, category, color, emoji = us_aqi_gauge(latest_actual_aqi)
+
         st.plotly_chart(
-            us_aqi_gauge(latest_actual_aqi),
+            fig,
             use_container_width=True,
-            config = {
+            config={
                 "displayModeBar": False
             }
         )
 
         st.markdown(
-            f"<h4 style='text-align:center;'>{get_aqi_status(latest_actual_aqi)[0]}</h4>",
+            f"""
+            <h3 style="
+                text-align: center;
+                color: {color};
+                margin-top: -25px;
+            ">
+                {category}
+            </h3>
+            """,
             unsafe_allow_html=True
         )
 
