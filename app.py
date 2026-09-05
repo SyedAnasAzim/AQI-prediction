@@ -80,7 +80,7 @@ def us_aqi_gauge(aqi):
     category, color, emoji = get_aqi_status(aqi)
 
     # Slightly darker version for active bar
-    active_color = darken_color(color, 0.65)
+    active_color = darken_color(color, 0.5)
 
     fig = go.Figure(
         go.Indicator(
@@ -89,7 +89,7 @@ def us_aqi_gauge(aqi):
 
             number={
                 "font": {
-                    "size": 42,
+                    "size": 60,
                     "color": color
                 }
             },
