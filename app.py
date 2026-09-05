@@ -451,7 +451,7 @@ def main():
             fig_shap = px.bar(
                 df_shap_plot.sort_values("shap_value"),
                 x="shap_value", y="feature_name", orientation="h",
-                color="shap_value", color_continuous_scale=["#c0392b", "#c8cdd6", "#5b82d6"],
+                color="shap_value", color_continuous_scale=["#c0392b","#da6363" , "#c8cdd6", "#5b82d6", "#3065d6"],
                 labels={"feature_name": "", "shap_value": "Impact on prediction"},
             )
             fig_shap.update_layout(
