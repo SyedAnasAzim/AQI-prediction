@@ -16,9 +16,9 @@ HORIZON_LABELS = {
     "aqi_t+72h": "Next 72 Hours",
 }
 HORIZON_COLORS = {
-    "aqi_t+24h": "#fc0000",
-    "aqi_t+48h": "#065025",
-    "aqi_t+72h": "#621c70",
+    "aqi_t+24h": "#3E48CA",
+    "aqi_t+48h": "#D35656",
+    "aqi_t+72h": "#a11f1f",
 }
 
 st.set_page_config(
@@ -408,7 +408,7 @@ def main():
         recent_actuals = df_actuals.sort_values("timestamp").tail(144)
         fig.add_trace(go.Scatter(
             x=recent_actuals["timestamp"], y=recent_actuals["us_aqi"],
-            mode="lines", name="Actual AQI", line=dict(color="#82a4e8", width=2.5)
+            mode="lines", name="Actual AQI", line=dict(color="#2a4699", width=2.5)
         ))
         for hori, group in df_preds.groupby("horizon"):
             fig.add_trace(go.Scatter(
@@ -474,7 +474,7 @@ def main():
         Regression, Random Forest, and a small neural network — are retrained daily,
         and the best-performing model for each horizon is used automatically.
         """)
-        
+
     st.markdown("---")
     with st.expander("Model performance"):
         latest_metrics = latest_preds[["horizon", "model_used", "model_version", "model_r2", "model_mae", "model_rmse"]].copy()
