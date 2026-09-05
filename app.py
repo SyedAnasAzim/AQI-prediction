@@ -38,6 +38,72 @@ def retry(fn, *, retries=3, delay=10, backoff=2, label="operation"):
                 current_delay *= backoff
     raise last_exc
 
+# --- gauge/speedometer func ---
+def us_aqi_gauge(aqi):
+
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=aqi,
+        number={
+            "font": {"size": 45}
+        },
+        title={
+            "text": "US AQI",
+            "font": {"size": 24}
+        },
+        gauge={
+            "axis": {
+                "range": [0, 500],
+                "tickvals": [0, 50, 100, 150, 200, 300, 500],
+                "ticktext": ["0", "50", "100", "150", "200", "300", "500"]
+            },
+
+            "bar": {
+                "color": "black",
+                "thickness": 0.15
+            },
+
+            "steps": [
+                {"range": [0, 50], "color": "#00E400"},
+                {"range": [50, 100], "color": "#FFFF00"},
+                {"range": [100, 150], "color": "#FF7E00"},
+                {"range": [150, 200], "color": "#FF0000"},
+                {"range": [200, 300], "color": "#8F3F97"},
+                {"range": [300, 500], "color": "#7E0023"},
+            ],
+
+            "threshold": {
+                "line": {
+                    "color": "black",
+                    "width": 5
+                },
+                "thickness": 0.8,
+                "value": aqi
+            }
+        }
+    ))
+
+    fig.update_layout(
+        height=400,
+        margin=dict(l=30, r=30, t=80, b=20)
+    )
+
+    return fig
+
+
+def aqi_category(aqi):
+    if aqi <= 50:
+        return "Good"
+    elif aqi <= 100:
+        return "Moderate"
+    elif aqi <= 150:
+        return "Unhealthy for Sensitive Groups"
+    elif aqi <= 200:
+        return "Unhealthy"
+    elif aqi <= 300:
+        return "Very Unhealthy"
+    else:
+        return "Hazardous"
 
 # --- HOPSWORKS CONNECTION (Cached for speed with Retries) ---
 @st.cache_resource(show_spinner="Connecting to Hopsworks Feature Store...")
@@ -122,6 +188,9 @@ def main():
     if df_preds.empty:
         st.warning("No predictions found in local CSV log. Please ensure `inference.py` has run.")
         return
+    
+
+
 
     # Clean & sort dataframes
     df_preds["target_timestamp"] = pd.to_datetime(df_preds["target_timestamp"],format="mixed",errors="coerce")
@@ -131,6 +200,20 @@ def main():
     # Extract latest predictions
     latest_run_time = df_preds["prediction_made_at"].max()
     latest_preds = df_preds[df_preds["prediction_made_at"] == latest_run_time]
+    # ------------------------------------------------------------------
+    # Indicator for AQI
+    # ------------------------------------------------------------------
+    st.markdown("---")
+
+    latest_actual_row = df_actuals[df_actuals["timestamp"].max()]
+    latest_actual_aqi = latest_actual_row["us_aqi"]
+        
+    st.plotly_chart(
+        us_aqi_gauge(latest_actual_aqi),
+        use_container_width=True
+    )
+
+    st.markdown("---")
 
     # ------------------------------------------------------------------
     # AQI DYNAMIC ALERT BANNER
