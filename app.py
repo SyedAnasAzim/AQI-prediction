@@ -205,7 +205,7 @@ def main():
     # ------------------------------------------------------------------
     st.markdown("---")
 
-    latest_actual_row = df_actuals[df_actuals["timestamp"].max()]
+    latest_actual_row = df_actuals.iloc[df_actuals["timestamp"].idxmax()]
     latest_actual_aqi = latest_actual_row["us_aqi"]
         
     st.plotly_chart(
