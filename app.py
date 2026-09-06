@@ -265,23 +265,37 @@ def main():
     
     # 2. Render everything using a clean, un-clippable CSS Flexbox layout
     st.markdown(
+        """
+        <style>
+            /* Removes Streamlit's header restriction and adds inner padding */
+            .block-container {
+                padding-top: 2.5rem !important;
+                padding-bottom: 0rem !important;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    
+    # 3. Render the header layout safely with internal padding adjustments
+    st.markdown(
         f"""
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%; padding-top: 10px;">
             <!-- Left Side: Title and Subtitles -->
             <div>
-                <h1 style="margin: 0; padding: 0; font-size: 2.5rem; font-weight: bold; color: #90caf9;">
+                <h1 style="margin: 0; padding: 0; font-size: 2.5rem; font-weight: bold; color: #90caf9; line-height: 1.2;">
                     Pearls AQI Predictor
                 </h1>
-                <p style="margin: 5px 0 0 0; color: #a0a0a0; font-size: 0.95rem;">
+                <p style="margin: 8px 0 0 0; color: #a0a0a0; font-size: 0.95rem;">
                     Hourly AQI forecasts, powered by the best of three daily-retrained models (Ridge, Random Forest, Neural Network).
                 </p>
-                <p style="margin: 5px 0 0 0; color: #42a5f5; font-size: 0.9rem;">
+                <p style="margin: 6px 0 0 0; color: #42a5f5; font-size: 0.9rem;">
                     📍 Karachi, Pakistan · 24.8607°N, 67.0011°E
                 </p>
             </div>
-            <!-- Right Side: The Icon (will never be clipped) -->
-            <div style="flex-shrink: 0; padding-left: 20px;">
-                <img src="data:image/png;base64,{img_b64}" style="width: 80px; height: auto; object-fit: contain;">
+            <!-- Right Side: The Icon -->
+            <div style="flex-shrink: 0; padding-left: 20px; padding-top: 5px;">
+                <img src="data:image/png;base64,{img_b64}" style="width: 85px; height: auto; object-fit: contain; display: block;">
             </div>
         </div>
         """,
