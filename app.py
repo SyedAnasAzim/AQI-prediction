@@ -260,8 +260,8 @@ def load_data():
 # Main
 # ----------------------------------------------------------------------
 def main():
-    try:
-        img_b64 = get_image_base64("./Icon/wind.png")
+    
+    img_b64 = get_image_base64("./Icon/wind.png")
     
     # 2. Render everything using a clean, un-clippable CSS Flexbox layout
     st.markdown(
