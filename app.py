@@ -300,7 +300,7 @@ def main():
             Avoid outdoor activity where possible and consider a mask outdoors.
         </div>
         """, unsafe_allow_html=True)
-    elif max_predicted_aqi > 150:
+    elif max_predicted_aqi > 15:
         st.markdown(f"""
         <div class="alert-card" style="border-color:#d97b29; background:rgba(217,123,41,0.12);">
             <strong>Unhealthy air quality expected.</strong> Peak forecast is
