@@ -256,7 +256,7 @@ def load_data():
 # Main
 # ----------------------------------------------------------------------
 def main():
-    st.markdown("# Pearls AQI Predictor + "&nbsp;"*30 + ![icon](app/static/Icon/wind.png)")
+    st.markdown("# Pearls AQI Predictor" + "&nbsp;" * 30 + "![icon](app/static/Icon/wind.png)")
     st.caption("Hourly AQI forecasts, powered by the best of three daily-retrained models (Ridge, Random Forest, Neural Network).")
     st.markdown(
         '<div class="location-line">📍 Karachi, Pakistan · 24.8607°N, 67.0011°E</div>',
