@@ -1,5 +1,6 @@
 import os
 import time
+import base64
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -182,7 +183,10 @@ def get_aqi_status(aqi_val):
     else:
         return "Hazardous", "#7b1e2e"
 
-
+def get_image_base64(path):
+    with open(path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode()
+        
 def darken_color(hex_color, factor=0.8):
     hex_color = hex_color.lstrip("#")
     r, g, b = (int(hex_color[i:i+2], 16) for i in (0, 2, 4))
@@ -256,18 +260,34 @@ def load_data():
 # Main
 # ----------------------------------------------------------------------
 def main():
-    col_title, col_icon = st.columns([0.8, 0.2])
+    try:
+        img_b64 = get_image_base64("./Icon/wind.png")
+    
+    # 2. Render everything using a clean, un-clippable CSS Flexbox layout
+    st.markdown(
+        f"""
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+            <!-- Left Side: Title and Subtitles -->
+            <div>
+                <h1 style="margin: 0; padding: 0; font-size: 2.5rem; font-weight: bold; color: #90caf9;">
+                    Pearls AQI Predictor
+                </h1>
+                <p style="margin: 5px 0 0 0; color: #a0a0a0; font-size: 0.95rem;">
+                    Hourly AQI forecasts, powered by the best of three daily-retrained models (Ridge, Random Forest, Neural Network).
+                </p>
+                <p style="margin: 5px 0 0 0; color: #42a5f5; font-size: 0.9rem;">
+                    📍 Karachi, Pakistan · 24.8607°N, 67.0011°E
+                </p>
+            </div>
+            <!-- Right Side: The Icon (will never be clipped) -->
+            <div style="flex-shrink: 0; padding-left: 20px;">
+                <img src="data:image/png;base64,{img_b64}" style="width: 80px; height: auto; object-fit: contain;">
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    with col_title:
-        st.title("Pearls AQI Predictor")
-        st.caption("Hourly AQI forecasts, powered by the best of three daily-retrained models (Ridge, Random Forest, Neural Network).")
-        st.markdown(
-            '<div class="location-line">📍 Karachi, Pakistan · 24.8607°N, 67.0011°E</div>',
-            unsafe_allow_html=True
-        )
-    with col_icon:
-        # Streamlit handles local file paths perfectly using st.image
-        st.image("./Icon/wind.png", width=110)
     
     try:
         df_preds, df_shap, df_actuals = load_data()
