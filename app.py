@@ -22,7 +22,7 @@ HORIZON_COLORS = {
 }
 
 st.set_page_config(
-    page_title="Karachi Air Quality Forecast",
+    page_title="Pearls Air Quality Forecast",
     page_icon="〰",
     layout="wide",
 )
