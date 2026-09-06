@@ -260,16 +260,15 @@ def main():
 
     with col_title:
         st.title("Pearls AQI Predictor")
-    
+        st.caption("Hourly AQI forecasts, powered by the best of three daily-retrained models (Ridge, Random Forest, Neural Network).")
+        st.markdown(
+            '<div class="location-line">📍 Karachi, Pakistan · 24.8607°N, 67.0011°E</div>',
+            unsafe_allow_html=True
+        )
     with col_icon:
         # Streamlit handles local file paths perfectly using st.image
         st.image("./Icon/wind.png", width=60)
-    st.caption("Hourly AQI forecasts, powered by the best of three daily-retrained models (Ridge, Random Forest, Neural Network).")
-    st.markdown(
-        '<div class="location-line">📍 Karachi, Pakistan · 24.8607°N, 67.0011°E</div>',
-        unsafe_allow_html=True
-    )
-
+    
     try:
         df_preds, df_shap, df_actuals = load_data()
     except Exception as e:
