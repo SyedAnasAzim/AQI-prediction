@@ -83,6 +83,9 @@ AQI-prediction/
 │       ├── inference.yml       # triggered via workflow_run after python-app.yml
 │       └── train_daily.yml     # daily retraining (model_training.py)
 │
+├── Icon
+│   └── wind.png
+│
 ├── Report/
 │   └── Pearls_AQI_Predictor_Report.pdf
 │ 
