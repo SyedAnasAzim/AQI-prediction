@@ -308,7 +308,7 @@ def main():
             Sensitive groups should limit time outdoors.
         </div>
         """, unsafe_allow_html=True)
-    elif max_predicted_aqi > 10:
+    elif max_predicted_aqi > 100:
         st.markdown(f"""
         <div class="alert-card" style="border-color:#c9a227; background:rgba(201,162,39,0.12);">
             Air quality trends moderate over the coming days — peak forecast of
