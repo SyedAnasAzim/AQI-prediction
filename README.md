@@ -82,22 +82,22 @@ AQI-prediction/
 │       ├── python-app.yml      # hourly ingestion (update_data.py)
 │       ├── inference.yml       # triggered via workflow_run after python-app.yml
 │       └── train_daily.yml     # daily retraining (model_training.py)
-│
-├── Icon
-│   └── wind.png
-│
-├── Report/
-│   └── Pearls_AQI_Predictor_Report.pdf
 │ 
 ├── data/
 │   ├── hourly_data_6d.csv               # rolling ~6-day window, hot-path read/write
 │   ├── shap_background_karachi_aqi.csv  # daily-refreshed SHAP reference sample
-│   └── aqi_shap_values.csv              # SHAP values for the latest inference run only
+│   └── aqi_shap_values.csv        # SHAP values for the latest inference run only
+│
+├── Icon
+│   └── wind.png
 │
 ├── Notebook/
 │   ├── AQI_EDA_and_model_training.ipynb # EDA, preprocessing, and model prototyping
 │   └── AQI_data_till_2026-08-22 21_00_00.csv
 │
+├── Report/
+│   └── Pearls_AQI_Predictor_Report.pdf
+│ 
 ├── scripts/
 │   ├── feature_engineering.py       # shared feature logic (training + inference)
 │   ├── historical_data_script.py    # one-time historical backfill (not scheduled)
