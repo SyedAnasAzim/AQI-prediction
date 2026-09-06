@@ -23,7 +23,7 @@ HORIZON_COLORS = {
 
 st.set_page_config(
     page_title="Pearls Air Quality Forecast",
-    page_icon="〰",
+    page_icon="Icon/wind.png",
     layout="wide",
 )
 
