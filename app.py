@@ -300,7 +300,7 @@ def main():
             Avoid outdoor activity where possible and consider a mask outdoors.
         </div>
         """, unsafe_allow_html=True)
-    elif max_predicted_aqi > 15:
+    elif max_predicted_aqi > 150:
         st.markdown(f"""
         <div class="alert-card" style="border-color:#d97b29; background:rgba(217,123,41,0.12);">
             <strong>Unhealthy air quality expected.</strong> Peak forecast is
@@ -308,7 +308,7 @@ def main():
             Sensitive groups should limit time outdoors.
         </div>
         """, unsafe_allow_html=True)
-    elif max_predicted_aqi > 100:
+    elif max_predicted_aqi > 10:
         st.markdown(f"""
         <div class="alert-card" style="border-color:#c9a227; background:rgba(201,162,39,0.12);">
             Air quality trends moderate over the coming days — peak forecast of
