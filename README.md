@@ -1,4 +1,4 @@
-# 🌫️ Karachi AQI Prediction & Forecasting
+# 🌫️ AQI Prediction & Forecasting
 
 An end-to-end machine learning system for **Air Quality Index (AQI) prediction and forecasting in Karachi, Pakistan**.
 
@@ -83,6 +83,9 @@ AQI-prediction/
 │       ├── inference.yml       # triggered via workflow_run after python-app.yml
 │       └── train_daily.yml     # daily retraining (model_training.py)
 │
+├── Report/
+│   └── Pearls_AQI_Predictor_Report.pdf
+│ 
 ├── data/
 │   ├── hourly_data_6d.csv               # rolling ~6-day window, hot-path read/write
 │   ├── shap_background_karachi_aqi.csv  # daily-refreshed SHAP reference sample
