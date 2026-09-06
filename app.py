@@ -257,7 +257,7 @@ def load_data():
 # ----------------------------------------------------------------------
 def main():
     st.markdown("# Karachi Air Quality")
-    st.caption("Hourly forecasts from an ensemble of Ridge, Random Forest, and Neural Network models.")
+    st.caption("Hourly AQI forecasts, powered by the best of three daily-retrained models (Ridge, Random Forest, Neural Network).")
     st.markdown(
         '<div class="location-line">📍 Karachi, Pakistan · 24.8607°N, 67.0011°E</div>',
         unsafe_allow_html=True
