@@ -267,7 +267,7 @@ def main():
         )
     with col_icon:
         # Streamlit handles local file paths perfectly using st.image
-        st.image("./Icon/wind.png", width=100)
+        st.image("./Icon/wind.png", width=110)
     
     try:
         df_preds, df_shap, df_actuals = load_data()
